@@ -1,0 +1,3506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title> qaq Offline Bubble Editor </title>
+    <style>
+        :root {
+            --primary: #000000;
+            --accent: #2c55e0;
+            --user-color: #e74c3c;
+            --ai-color: #3498db;
+            --bg: #f5f5f7;
+            --white: #ffffff;
+            --border: #e1e1e1;
+            --text: #333333;
+            --text-sub: #888888;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 预览区域 */
+        .preview-container {
+    flex-shrink: 0;
+    height: 35vh;
+    overflow: visible;  /* ★ 改成 visible，或者用overflow-y: auto; overflow-x: visible; */
+    position: relative;
+    z-index: 100;
+    border-bottom: 1px solid var(--border);
+}
+
+        .preview-container.bg-checker {
+            background-color: #e5e5e5;
+            background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), 
+                              linear-gradient(-45deg, #ccc 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #ccc 75%), 
+                              linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+        .preview-container.bg-white { background: #ffffff; }
+        .preview-container.bg-dark { background: #1a1a2e; }
+        .preview-container.bg-black { background: #000000; }
+
+        .bg-switcher {
+            position: absolute; top: 8px; right: 8px; display: flex; gap: 5px; z-index: 200;
+        }
+        .bg-btn {
+            width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
+        }
+        .bg-btn.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+        .bg-btn[data-bg="checker"] { background: linear-gradient(45deg, #ccc 25%, #fff 25%, #fff 50%, #ccc 50%, #ccc 75%, #fff 75%); background-size: 8px 8px; }
+        .bg-btn[data-bg="white"] { background: #ffffff; }
+        .bg-btn[data-bg="dark"] { background: #1a1a2e; }
+        .bg-btn[data-bg="black"] { background: #000000; }
+
+        /*★ 新增：让滚动在scroll-wrapper上处理 */
+.scroll-wrapper {
+    width: 100%;
+    height: 100%; 
+    overflow: auto;/* 这里处理滚动 */
+    padding: 80px 0;display: flex; 
+    flex-direction: column; 
+    align-items: center;
+}
+
+/* ★ 确保消息容器也能溢出 */
+#preview-messages {
+    display: flex; 
+    flex-direction: column; 
+    gap: 20px; 
+    align-items: center;
+    overflow: visible !important;
+}
+
+        /* 编辑器 */
+        .editor-container { flex: 1; background: var(--white); display: flex; flex-direction: column; overflow: hidden; }
+        
+        .role-switcher { display: flex; border-bottom: 1px solid var(--border); background: #fafafa; }
+        .role-btn {
+            flex: 1; padding: 12px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer;
+            border: none; background: transparent; position: relative; color: #666;
+        }
+        .role-btn::after {
+            content: ''; position: absolute; bottom: 0; left: 20%; width: 60%; height: 3px;
+            border-radius: 3px 3px 0 0; background: transparent;
+        }
+        .role-btn.active { color: var(--primary); background: var(--white); }
+        .role-btn.active::after { background: currentColor; }
+        .role-btn[data-role="user"].active { color: var(--user-color); }
+        .role-btn[data-role="ai"].active { color: var(--ai-color); }
+
+        .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--white); overflow-x: auto; flex-shrink: 0; }
+        .tab-item { padding: 10px 14px; font-size: 12px; font-weight: 500; color: var(--text-sub); cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; }
+        .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); }
+        
+        .panels { flex: 1; overflow-y: auto; padding: 12px; background: #fafafa; }
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .control-group { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        .group-title { font-size: 11px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .form-row { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
+        .form-label { width: 65px; font-size: 11px; color: var(--text); flex-shrink: 0; }
+        
+        input[type="text"], textarea, select { flex: 1; padding: 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; background: var(--white); min-width: 0; }
+        input[type="range"] { flex: 1; height: 4px; background: #ddd; border-radius: 2px; -webkit-appearance: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--white); border: 1px solid #ccc; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        input[type="color"] { width: 30px; height: 30px; border: none; background: none; padding: 0; cursor: pointer; border-radius: 4px; }
+        
+        .toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent); }
+        input:checked + .slider:before { transform: translateX(16px); }
+
+        .btn-primary { width: 100%; padding: 10px; background: var(--primary); color: var(--white); border: none; border-radius: 6px; font-size: 12px; font-weight: 600; margin-top: 6px; cursor: pointer; }
+        .btn-sm { padding: 3px 6px; font-size: 10px; background: #eee; border: none; border-radius: 3px; cursor: pointer; }
+        .sync-btn { background: linear-gradient(135deg, var(--user-color), var(--ai-color)); color: white; border: none; padding: 3px 8px; border-radius: 3px; font-size: 10px; cursor: pointer; }
+
+        .slider-row { flex: 1; display: flex; align-items: center; gap: 6px; }
+        .num-input { width: 45px; padding: 4px; border: 1px solid var(--border); border-radius: 3px; font-size: 10px; text-align: center; }
+
+        .code-output { background: #f5f5f5; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 10px; color: #333; border: 1px solid #ddd; margin-top: 8px; max-height: 200px; overflow-y: auto; display: none; white-space: pre-wrap; word-break: break-all; }
+        #parseLog { margin-top:8px; padding:8px; background:#fff; border: 1px solid #eee; border-radius:4px; font-size:11px; color:#333; max-height:150px; overflow-y:auto; display:none; line-height: 1.5; }
+        .log-info { color: #2563eb; font-weight: bold; }
+
+        .copy-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 16px; border-radius: 16px; font-size: 12px; opacity: 0; transition: opacity 0.3s; z-index: 9999; pointer-events: none; }
+        .copy-toast.show { opacity: 1; }
+
+        /* 预览消息基础样式 */
+        .preview-message { position: relative; transition: all 0.2s; }
+        .preview-avatar { position: relative; z-index: 10; overflow: visible; }
+        .preview-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .preview-content { position: relative; overflow: hidden; }
+        .preview-text { position: relative; white-space: pre-wrap; word-break: break-all; }
+
+        /* 辅助类 */
+        .sub-label { font-size: 9px; color: #999; margin-left: 4px; }
+        /* 智能调色板样式 */
+.palette-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 4px;
+    background: #f0f2f5;
+    border-radius: 4px;
+    min-height: 28px;
+}
+.palette-item {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.palette-item input[type="color"] {
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    padding: 0; margin: 0;
+    border: none;
+    cursor: pointer;
+    opacity: 0; /* 隐藏原生控件但保留点击区域 */
+}
+.palette-bg {
+    width: 100%; height: 100%;
+}
+.palette-item span {
+    background: #ff4444;
+    color: white;
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* 代码输出框样式 */
+#codeOutput {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+#codeOutput:focus {
+    outline: 2px solid var(--accent);
+}
+
+/* 导出按钮悬停效果 */
+.btn-primary:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+/* 加密选项样式 */
+.obf-option { 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+    font-size: 11px; 
+    cursor: pointer; 
+    padding: 4px 0;
+}
+.obf-option input { 
+    width: 16px; 
+    height: 16px; 
+    cursor: pointer;
+}
+.obf-option:hover {
+    color: var(--accent);
+}
+    </style>
+</head>
+<body>
+
+<!-- 1. 预览区 -->
+<div class="preview-container bg-checker" id="previewContainer">
+    <div class="bg-switcher">
+        <div class="bg-btn active" data-bg="checker" onclick="switchBg('checker')"></div>
+        <div class="bg-btn" data-bg="white" onclick="switchBg('white')"></div>
+        <div class="bg-btn" data-bg="dark" onclick="switchBg('dark')"></div>
+        <div class="bg-btn" data-bg="black" onclick="switchBg('black')"></div>
+    </div>
+
+    <div class="scroll-wrapper">
+        <div id="preview-messages">
+            <!-- User 消息 -->
+            <div class="preview-message" id="preview-user">
+                <div class="preview-avatar" id="avatar-user">
+                    <img src="" style="display:none">
+                </div>
+                <div class="preview-content" id="content-user">
+                    <div class="preview-text">用户消息示例...</div>
+                </div>
+            </div>
+            <!-- AI 消息 -->
+            <div class="preview-message" id="preview-ai">
+                <div class="preview-avatar" id="avatar-ai">
+                    <img src="" style="display:none">
+                </div>
+                <div class="preview-content" id="content-ai">
+                    <div class="preview-text">AI 回复示例...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. 编辑区 -->
+<div class="editor-container">
+    <div class="role-switcher">
+        <button class="role-btn active" data-role="common" onclick="switchRole('common')"> 通用设置</button>
+        <button class="role-btn" data-role="user" onclick="switchRole('user')">User 配置</button>
+        <button class="role-btn" data-role="ai" onclick="switchRole('ai')">AI 配置</button>
+    </div>
+
+    <div class="tabs" id="tabsContainer"></div>
+    <div class="panels" id="panelsContainer"></div>
+</div>
+
+<div class="copy-toast" id="copyToast">已复制到剪贴板</div>
+<style id="generated-css"></style>
+
+<script>
+// ==================== 数据结构 ====================
+let currentRole = 'common';
+
+// 通用配置
+const commonConfig = {
+    cardWidth: 380,
+    cardMinHeight: 150,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    cardGap: 0,
+    cardRadius: 4,
+    cardOverflow: false,
+    marginBottom: 40,
+    fontFamily: 'sans-serif',
+    customFontUrl: ''
+};
+
+// 角色配置模板
+const roleDefaults = {
+    bubbleMode: false,
+    customFontUrl: '',
+    fontFamily: 'inherit',
+    
+    useGradient: false,
+    cardBgColor: '#ffffff', cardBgOpacity: 100,
+    cardBgColor2: '#ffffff', cardBgOpacity2: 100,
+    gradientDirection: '180deg',
+    cardBgImg: '', bgPosX: 50, bgPosY: 50,
+    bgSizeFill: true,
+    bgScale: 100,
+    cardBgCss: '', 
+    
+    poster_Ref: 'content_before',      // 封面默认位置
+    avatarFrame_Ref: 'avatar_after',   // 头像框默认位置
+    decoA_Ref: 'avatar_before',        // 装饰A默认位置
+    decoB_Ref: 'msg_after',            // 装饰B默认位置
+    decoC_Ref: 'content_after',  
+    
+    // 【修改】边框相关
+    borderWidth: 1,
+    borderTop: 1, borderBottom: 1, borderLeft: 1, borderRight: 1,
+    borderStyle: 'solid',  // 【新增】边框样式
+    cardBorderColor: '#e0e0e0', cardBorderOpacity: 100,
+    
+    cardShadowX: 0, cardShadowY: 5, cardShadowBlur: 10, cardShadowSpread: 0,
+    cardShadowColor: '#000000', cardShadowOpacity: 10,
+
+    posterEnable: true, posterImg: '', posterHeight: 190, posterPos: 50,
+    posterPosition: 'top',
+    posterSizeFill: true,
+    posterMaskTop: 0, posterMaskBottom: 0,
+    
+    avatarUrl: '', avatarSize: 40, 
+    avatarRadius: 50, 
+    avatarBorderWidth: 0, avatarBorderColor: '#ffffff', avatarBorderOpacity: 100,
+    avatarShadowX: 0, avatarShadowY: 2, avatarShadowBlur: 5, avatarShadowColor: '#000000', avatarShadowOpacity: 20,
+    
+    avatarAbsolute: true,
+    avatarXOffset: 0, avatarYOffset: 60, avatarZIndex: 20,
+    
+    avatarFrameUrl: '', avatarFrameSize: 100, avatarFrameX: 0, avatarFrameY: 0,
+
+    decoA_Enable: false, decoA_Type: 'text',
+    decoA_Text: 'Tag', decoA_Img: '',
+    decoA_Color: '#ffffff', decoA_Size: 10,
+    decoA_BgColor: '#ff6666', decoA_BgOpacity: 100,
+    decoA_BgEnable: false,
+    decoA_Border: 'none', decoA_Radius: 4, decoA_Blur: 0,
+    decoA_X: 0, decoA_Y: 0,
+    decoA_Wrap: 'nowrap',
+    decoA_Align: 'center',
+    decoA_FontFamily: 'inherit',
+    decoA_FontUrl: '',
+    
+    decoB_Enable: false, decoB_Type: 'text',
+    decoB_Text: 'Decoration', decoB_Img: '',
+    decoB_Color: '#333333', decoB_Size: 12,
+    decoB_BgColor: '#ffffff', decoB_BgOpacity: 80,
+    decoB_BgEnable: false,
+    decoB_Border: '1px solid #eee', decoB_Radius: 12, decoB_Blur: 10,
+    decoB_X: 0, decoB_Y: 0,
+    decoB_Wrap: 'nowrap',
+    decoB_Align: 'center',
+    decoB_FontFamily: 'inherit',
+    decoB_FontUrl: '',
+
+    decoC_Enable: false, decoC_Type: 'text',
+    decoC_Text: '', decoC_Img: '',
+    decoC_Color: '#888888', decoC_Size: 12,
+    decoC_BgColor: '#ffffff', decoC_BgOpacity: 100,
+    decoC_BgEnable: false,
+    decoC_Radius: 4, decoC_Blur: 0,
+    decoC_Spacing: 1,
+    decoC_X: 0, decoC_Y: 0,
+    decoC_Wrap: 'nowrap',
+    decoC_Align: 'center',
+    decoC_FontFamily: 'inherit',
+    decoC_FontUrl: '',
+    decoC_Opacity: 100,
+
+    textContent: '消息内容...', textColor: '#333333', textSize: 15, textLineHeight: 28,
+    textAlign: 'center', textSpacing: 0.5,
+    contentPadding: 20, contentPaddingTop: 130, contentPaddingBottom: 40,
+    customCss: '',
+    animationProp: '',
+    
+    // 【新增】特效
+    effectType: 'none',
+    
+    decoLayers: [],
+decoLayers_Ref: 'msg_before',  // 新增这行
+   // 楼层计数器
+counterEnable: false,
+counter_Ref: 'msg_before',
+counterStyle: 'decimal',
+counterCustomSymbols: '① ② ③ ④ ⑤ ⑥ ⑦ ⑧ ⑨ ⑩',  // 【新增】自定义符号
+counterCustomSystem: 'cyclic',                      // 【新增】循环/固定
+counterPrefix: '#',
+counterSuffix: '',
+// ... 其他配置不变
+counterPosition: 'right',
+counterX: 10,
+counterY: 10,
+counterSize: 12,
+counterColor: '#888888',
+counterOpacity: 100,
+counterBgEnable: false,
+counterBgColor: '#ffffff',
+counterBgOpacity: 80,
+counterRadius: 4,
+counterFontFamily: 'inherit',
+// 装饰A 新增
+decoA_Spacing: 0,
+decoA_LineHeight: 1.5,
+
+// 装饰B 新增
+decoB_Spacing: 0,
+decoB_LineHeight: 1.5,
+
+// 装饰C 补充行距（字距已有）
+decoC_LineHeight: 1.5,
+};
+
+const userConfig = JSON.parse(JSON.stringify(roleDefaults));
+userConfig.textContent = '用户消息示例...';
+userConfig.decoA_BgColor = '#ff6666';
+
+const aiConfig = JSON.parse(JSON.stringify(roleDefaults));
+aiConfig.textContent = 'AI 回复示例...';
+aiConfig.decoA_BgColor = '#3498db';
+aiConfig.counterPosition = 'left';
+
+const commonPanels = {
+    notice: {
+        title: ' 须知',
+        groups: [
+            {
+                title: '欢迎使用EVEChat线下气泡编辑器！',
+                custom: true,
+                html: `
+                    <div style="font-size:12px; line-height:2; color:#333;">
+                        <p><b>作者：</b>qaq</p>
+                        <p style="color:#666;">非常感谢我的好朋友们的测试以及改进意见！</p>
+                        <hr style="border:none; border-top:1px dashed #ddd; margin:12px 0;">
+                        <p> 此编辑器<b>仅能用于编辑EVEChat线下气泡</b>，禁止将代码更改为其他小手机气泡代码。</p>
+                        <p style="color:#e74c3c;"> <b>严禁将未授权的代码导入编辑器解析或加密。</b></p>
+                        <p style="color:#e74c3c;"> <b>严禁将未授权的代码放入编辑器二改、抄袭以及模仿等。</b></p>
+                        <p> 请不要删掉第一行的注释。</p>
+                        <hr style="border:none; border-top:1px dashed #ddd; margin:12px 0;">
+                        <p style="color:#888; font-size:11px;">谢绝对本编辑器的模仿、抄袭、擦边、借鉴等行为。</p>
+                    </div>
+                `
+            }
+        ]
+    },
+    layout: {
+        title: '布局与字体',
+        groups: [
+            {
+                title: '卡片容器布局',
+                fields: [
+                    { id: 'cardWidth', label: '总宽度', type: 'range', min: 200, max: 600, hasNum: true },
+                    // 修改 commonPanels.layout.groups[0].fields 中的 cardMinHeight
+{ id: 'cardMinHeight', label: '最小高度', type: 'range', min: 0, max: 1000, hasNum: true, hideInBubble: true },
+                    { id: 'flexDirection', label: '排列方向', type: 'select', options: [['column', '纵向 (气泡模式)'], ['row', '横向 (名片模式)']] },
+                    { id: 'alignItems', label: '对齐方式', type: 'select', options: [['center', '居中'], ['flex-start', '起点 (左/上)'], ['flex-end', '终点 (右/下)']] },
+                    { id: 'cardRadius', label: '容器圆角', type: 'range', min: 0, max: 50, hasNum: true },
+                    { id: 'marginBottom', label: '楼层间距', type: 'range', min: 0, max: 100, hasNum: true },
+                    { id: 'cardOverflow', label: '裁剪溢出', type: 'toggle' }
+                ]
+            },
+            {
+                title: '全局字体',
+                fields: [
+                    { id: 'fontFamily', label: '预设字体', type: 'select', options: [
+                        ['system-ui', '系统默认 (推荐)'],
+                        ['sans-serif', '无衬线 (黑体类)'],
+                        ['serif', '衬线 (宋体类)'],
+                        ['cursive', '手写体 (楷体类)'],
+                        ['monospace', '等宽字体']
+                    ]},
+                    { id: 'customFontUrl', label: '自定义URL', type: 'text', placeholder: 'https://.../font.ttf' }
+                ]
+            },
+            // 【可以在这里添加快速预设】
+            
+        ]  // ← 闭合 groups 数组
+    },     // ← 闭合 layout 对象
+    
+    export: {
+        title: '导出',
+        groups: [
+            {
+                title: '生成代码',
+                custom: true,
+                html: `
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        <button class="btn-primary" onclick="generateCode()"> 生成 CSS 代码</button>
+                        <button class="btn-primary" style="background:#2563eb;" onclick="generateCode('user')"> 仅生成 User</button>
+                        <button class="btn-primary" style="background:#3498db;" onclick="generateCode('ai')"> 仅生成 AI</button>
+                    </div>
+                    <textarea id="codeOutput" rows="12" style="width:100%; margin-top:10px; font-family:monospace; font-size:10px; border:1px solid #ccc; border-radius:6px; padding:8px; display:none; resize:vertical;"></textarea>
+                    <div id="exportButtons" style="display:none; margin-top:10px;">
+                        <div style="font-size:11px; color:#666; margin-bottom:6px;">导出方式：</div>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <button class="btn-primary" style="background:#10b981;" onclick="exportToClipboard()">📋 复制到剪贴板</button>
+                            <button class="btn-primary" style="background:#f59e0b;" onclick="exportToTxt()">📄 导出 TXT 文件</button>
+                            <button class="btn-primary" style="background:#8b5cf6;" onclick="exportToDocx()">📝 导出 DOCX 文件</button>
+                        </div>
+                    </div>
+                `
+            }
+        ]
+    },
+    
+    parser: {
+        title: '解析',
+        groups: [
+            {
+                title: '导入 CSS',
+                custom: true,
+                html: `
+                    <div style="font-size:10px; color:#666; margin-bottom:6px;">
+                        禁止无授权导入其他老师的代码
+                    </div>
+                    <textarea id="cssInput" rows="10" placeholder="粘贴 CSS 代码..." style="width:100%; font-family:monospace; font-size:10px; border:1px solid #ccc; border-radius:6px; padding:8px; resize:vertical;"></textarea>
+                    <button class="btn-primary" onclick="parseCSS()" style="margin-top:8px;"> 解析</button>
+                    <div id="parseLog"></div>
+                `
+            }
+        ]
+    },
+    
+// ★★★ 在这里添加下面的代码 ★★★
+    encrypt: {
+        title: ' 加密（测试版）',
+        groups: [
+            {
+                title: ' 作者水印',
+                custom: true,
+                html: `
+                    <div class="form-row">
+                        <span class="form-label">作者名</span>
+                        <input type="text" id="authorName" value="qaq" placeholder="你的名字">
+                    </div>
+                    <div class="form-row">
+                        <span class="form-label">联系方式</span>
+                        <input type="text" id="authorContact" value="" placeholder="QQ/微信/邮箱">
+                    </div>
+                    <div class="form-row">
+                        <span class="form-label">自定义声明</span>
+                        <textarea id="authorStatement" rows="2" placeholder="例如：禁止无授权使用" style="font-size:10px;"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <span class="form-label">水印位置</span>
+                        <select id="watermarkPosition">
+                            <option value="random"> 随机分布</option>
+                            <option value="top">仅顶部</option>
+                            <option value="middle"> 仅中间</option>
+                            <option value="bottom"> 仅底部</option>
+                            <option value="all"> 全部位置</option>
+                        </select>
+                    </div><div class="form-row">
+                        <span class="form-label">水印数量</span>
+                        <div class="slider-row">
+                            <input type="range" id="watermarkCount" min="1" max="10" value="3">
+                            <input type="number" id="watermarkCount_num" class="num-input" value="3" min="1" max="10">
+                        </div>
+                    </div>
+                `
+            },
+            {
+                title: ' 自定义编码',
+                custom: true,
+                html: `
+                    <div class="form-row">
+                        <span class="form-label">隐藏标识</span>
+                        <input type="text" id="hiddenMark" value="qaq" placeholder="会转成十六进制">
+                    </div>
+                    <div class="form-row" style="margin-top:4px;">
+                        <span class="form-label"></span>
+                        <span style="font-size:9px;color:#888;">预览: <code id="hexPreview" style="background:#f0f0f0;padding:2px 4px;border-radius:2px;">\\71\\61\\71</code></span>
+                    </div>
+                    <div class="form-row">
+                        <span class="form-label">类名前缀</span>
+                        <input type="text" id="classPrefixValue" value="qaq-" placeholder="如: myStyle-">
+                    </div>
+                    <div class="form-row">
+                        <span class="form-label">变量前缀</span>
+                        <input type="text" id="varPrefixValue" value="--qaq" placeholder="如: --my">
+                    </div>
+                    <div style="margin-top:8px;padding:8px;background:#f5f5f5;border-radius:4px;">
+                        <div style="font-size:10px;color:#666;margin-bottom:6px;"> 自定义干扰词库（每行一个）</div>
+                        <textarea id="customObfWords" rows="3" placeholder="style&#10;design&#10;creative&#10;layer" style="width:100%;font-size:10px;"></textarea>
+                    </div>
+                `
+            },
+            {
+                title: ' 混淆选项',
+                custom: true,
+                html: `
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <label class="obf-option">
+                            <input type="checkbox" id="obf_randomComments" checked>
+                            <span> 随机干扰注释</span>
+                        </label>
+                        <label class="obf-option">
+                            <input type="checkbox" id="obf_hexContent" checked>
+                            <span> 十六进制隐藏标识</span>
+                        </label>
+                        <label class="obf-option">
+                            <input type="checkbox" id="obf_authorMark" checked>
+                            <span> 作者水印注释</span>
+                        </label>
+                        <label class="obf-option">
+                            <input type="checkbox" id="obf_dummyRules">
+                            <span> 插入无效CSS规则</span>
+                        </label>
+                        <label class="obf-option">
+                            <input type="checkbox" id="obf_classPrefix">
+                            <span> 添加类名前缀</span>
+                        </label>
+                        <label class="obf-option">
+                            <input type="checkbox" id="obf_unicodeEscape">
+                            <span> Unicode编码注释</span>
+                        </label>
+                        <label class="obf-option" style="border:2px solid #f59e0b;background:#fffbeb;padding:8px;border-radius:6px;">
+                            <input type="checkbox" id="obf_chainLock">
+                            <span><b>链式锁定</b></span>
+                        </label>
+                    </div>
+                `
+            },
+            {
+                title: ' 混淆强度',
+                custom: true,
+                html: `
+                    <div class="form-row">
+                        <span class="form-label">强度等级</span>
+                        <div class="slider-row">
+                            <input type="range" id="obfuscationLevel" min="1" max="5" value="2">
+                            <span id="obfuscationLevel_disp" style="font-size:10px;width:50px;text-align:center;">中度</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;padding:8px;background:#f0f0f0;border-radius:4px;font-size:9px;color:#666;">
+                        <div id="levelDescription">等级2：插入6条注释 + 2条dummy规则</div>
+                    </div>
+                `
+            },
+            {
+                title: ' 生成加密代码',
+                custom: true,
+                html: `
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <button class="btn-primary" onclick="generateEncryptedCode()" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+                             生成混淆代码（完整）
+                        </button>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn-primary" onclick="generateEncryptedCode('user')" style="flex:1;background:#e74c3c;">
+                                User
+                            </button>
+                            <button class="btn-primary" onclick="generateEncryptedCode('ai')" style="flex:1;background:#3498db;">
+                                AI
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="encryptedOutput" rows="10" style="width:100%;margin-top:10px;font-family:monospace;font-size:9px;display:none;background:#1e1e1e;color:#d4d4d4;border-radius:6px;padding:8px;"></textarea>
+                    <div id="encryptedExportBtns" style="display:none;margin-top:8px;">
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn-primary" style="flex:1;background:#10b981;" onclick="copyEncrypted()"> 复制</button>
+                            <button class="btn-primary" style="flex:1;background:#f59e0b;" onclick="downloadEncrypted()"> 下载</button>
+                        </div>
+                        <div style="margin-top:8px;padding:8px;background:#f5f5f5;border-radius:4px;">
+                            <div style="font-size:10px;color:#666;"> 统计：<span id="codeStats">-</span></div>
+                        </div>
+                    </div>
+                `
+            }
+            
+        ]
+    }
+};// commonPanels 的闭合
+
+const rolePanels = {
+    bg: {
+        title: '背景与边框',
+        groups: [
+            {
+                title: '背景设置',
+                fields: [
+                    { id: 'bubbleMode', label: '气泡模式', type: 'toggle' },  
+                    { id: 'useGradient', label: '启用渐变', type: 'toggle', hideInBubble: false },
+                    { id: 'cardBgColor', label: '主颜色', type: 'color_alpha', alphaId: 'cardBgOpacity' },
+                    { id: 'cardBgColor2', label: '结束色', type: 'color_alpha', alphaId: 'cardBgOpacity2', showIf: 'useGradient' },
+                    { id: 'gradientDirection', label: '渐变角度', type: 'select', options: [['180deg', '↓ 下'], ['0deg', '↑ 上'], ['90deg', '→ 右'], ['270deg', '← 左'], ['45deg', '↘ 右下']], showIf: 'useGradient' },
+                    { id: 'cardBgImg', label: '背景图', type: 'text', hasUpload: true },
+                    { id: 'bgSizeFill', label: '铺满容器', type: 'toggle' },
+                    { id: 'bgScale', label: '缩放%', type: 'range', min: 10, max: 300, hasNum: true },
+                    { id: 'bgPosX', label: 'X位置%', type: 'range', min: 0, max: 100, hasNum: true },
+                    { id: 'bgPosY', label: 'Y位置%', type: 'range', min: 0, max: 100, hasNum: true },
+                    { id: 'cardBgCss', label: '高级CSS', type: 'text', placeholder: 'rgba(...) 或 linear-gradient(...)' }
+                ]
+            },
+            {
+    title: '边框设置',
+    fields: [
+        { id: 'cardBorderColor', label: '边框色', type: 'color_alpha', alphaId: 'cardBorderOpacity' },
+        { id: 'borderStyle', label: '边框样式', type: 'select', options: [
+            ['solid', '── 实线'],
+            ['dashed', '- - 虚线'],
+            ['dotted', '··· 点线'],
+            ['double', '═══ 双实线'],
+            ['groove', '凹槽 (古风)'],
+            ['ridge', '凸起 (古风)'],
+            ['inset', '内嵌立体'],
+            ['outset', '外凸立体']
+        ]},
+        { id: 'borderWidth', label: '统一粗细', type: 'range', min: 0, max: 20, hasNum: true },  // ← 新增
+        { id: 'borderTop', label: '上边框', type: 'range', min: 0, max: 20, hasNum: true },
+        { id: 'borderBottom', label: '下边框', type: 'range', min: 0, max: 20, hasNum: true },
+        { id: 'borderLeft', label: '左边框', type: 'range', min: 0, max: 20, hasNum: true },
+        { id: 'borderRight', label: '右边框', type: 'range', min: 0, max: 20, hasNum: true }
+    ]
+},
+            {
+                title: '阴影设置',
+                fields: [
+                    { id: 'cardShadowColor', label: '阴影色', type: 'color_alpha', alphaId: 'cardShadowOpacity' },
+                    { id: 'cardShadowX', label: 'X轴偏移', type: 'range', min: -50, max: 50, hasNum: true },
+                    { id: 'cardShadowY', label: 'Y轴偏移', type: 'range', min: -50, max: 50, hasNum: true },
+                    { id: 'cardShadowBlur', label: '模糊', type: 'range', min: 0, max: 100, hasNum: true },
+                    { id: 'cardShadowSpread', label: '扩展', type: 'range', min: -20, max: 50, hasNum: true }
+                ]
+            }
+        ]
+    },
+    
+    effects: {
+        title: ' 特效',
+        groups: [
+            {
+                title: '预设特效 (卡片/气泡通用)',
+                fields: [
+                    { id: 'effectType', label: '效果类型', type: 'select', options: [
+                        ['none', ' 无特效'],
+                        ['jelly', ' 果冻感'],
+                        ['silver', ' 镀银感'],
+                        ['emboss', ' 浮雕感'],
+                        ['glass', ' 毛玻璃'],
+                        ['neon', ' 霓虹边框'],
+                        ['neon-pink', ' 粉色霓虹'],
+                        ['vintage', ' 复古纸张'],
+                        ['gradient-border', ' 渐变边框'],
+                        ['inner-shadow', ' 内凹阴影'],
+                        ['candy', ' 糖果色'],
+                        ['wood', ' 木纹质感']
+                    ]}
+                ]
+            },
+            {
+                title: '特效说明',
+                custom: true,
+                html: `
+                    <div style="font-size:10px;color:#666;line-height:1.8;">
+                        <p> <b>果冻感</b> - 柔软透明的弹性光泽</p>
+                        <p> <b>镀银感</b> - 金属质感的光泽反射</p>
+                        <p> <b>浮雕感</b> - 立体凸起的雕刻效果</p>
+                        <p> <b>毛玻璃</b> - 半透明模糊背景</p>
+                        <p> <b>霓虹边框</b> - 青色发光边框</p>
+                        <p> <b>粉色霓虹</b> - 粉色发光边框</p>
+                        <p> <b>复古纸张</b> - 泛黄纸张质感</p>
+                        <p> <b>渐变边框</b> - 彩虹渐变边框</p>
+                        <p> <b>内凹阴影</b> - 向内凹陷效果</p>
+                        <p> <b>糖果色</b> - 甜美渐变光泽</p>
+                        <p> <b>木纹质感</b> - 自然木质纹理</p>
+                        <p style="color:#666;margin-top:10px;"> 特效CSS会自动生成，可在「内容→高级CSS」中微调</p>
+                    </div>
+                `
+            }
+        ]
+    },
+    
+    poster: {
+        title: '封面',
+        groups: [
+            {
+                title: '封面图片 (Content::before)',
+                bubbleHide: true,
+                fields: [
+                { id: 'poster_Ref', label: '挂载位置', type: 'select', options: [
+    ['msg_before', '卡片底层msgb (推荐多图层装饰或楼层计数器或封面图)'],
+['msg_after', '卡片顶层msga (推荐装饰B或装饰C)'],
+['content_before', '气泡底层conb (推荐封面图或背景光效)'],
+['content_after', '气泡顶层cona (推荐装饰C)'],
+['avatar_before', '头像底层avab (推荐装饰A)'],
+['avatar_after', '头像顶层avaa (推荐头像框)']
+], hideInBubble: true },
+                    { id: 'posterEnable', label: '启用', type: 'toggle', hideInBubble: true },
+                    { id: 'posterImg', label: '图片URL', type: 'text', hasUpload: true, hideInBubble: true },
+                    { id: 'posterPosition', label: '位置', type: 'select', options: [['top', '顶部'], ['bottom', '底部'], ['left', '左侧'], ['right', '右侧']], hideInBubble: true },
+                    { id: 'posterSizeFill', label: '铺满', type: 'toggle', hideInBubble: true },
+                    { id: 'posterHeight', label: '尺寸', type: 'range', min: 0, max: 1000, hasNum: true, hideInBubble: true },
+                    { id: 'posterPos', label: '显示位置%', type: 'range', min: 0, max: 100, hasNum: true, hideInBubble: true }
+                ]
+            },
+            {
+                title: '渐变遮罩 (融合效果)',
+                bubbleHide: true,
+                fields: [
+                    { id: 'posterMaskTop', label: '起始遮罩', type: 'range', min: 0, max: 200, hasNum: true, hideInBubble: true },
+                    { id: 'posterMaskBottom', label: '结束遮罩', type: 'range', min: 0, max: 200, hasNum: true, hideInBubble: true }
+                ]
+            }
+        ]
+    },
+    
+    avatar: {
+        title: '头像',
+        groups: [
+            {
+                title: '基本设置',
+                fields: [
+                    { id: 'avatarUrl', label: '图片', type: 'text', hasUpload: true },
+                    { id: 'avatarSize', label: '尺寸', type: 'range', min: 20, max: 200, hasNum: true },
+                    { id: 'avatarRadius', label: '圆角', type: 'range', min: 0, max: 50, hasNum: true, placeholder: '50=圆' },
+                    { id: 'avatarBorderWidth', label: '边框宽', type: 'range', min: 0, max: 10, hasNum: true },
+                    { id: 'avatarBorderColor', label: '边框色', type: 'color_alpha', alphaId: 'avatarBorderOpacity' }
+                ]
+            },
+            {
+                title: '位置与阴影',
+                fields: [
+                    { id: 'avatarAbsolute', label: '自由定位', type: 'toggle', hideInBubble: true },
+                    { id: 'avatarXOffset', label: 'X轴位置', type: 'range', min: -300, max: 300, hasNum: true, showIf: 'avatarAbsolute', hideInBubble: true },
+                    { id: 'avatarYOffset', label: 'Y轴位置', type: 'range', min: -200, max: 500, hasNum: true, showIf: 'avatarAbsolute', hideInBubble: true },
+                    { id: 'avatarShadowColor', label: '阴影色', type: 'color_alpha', alphaId: 'avatarShadowOpacity' },
+                    { id: 'avatarShadowX', label: '阴影X', type: 'range', min: -20, max: 20, hasNum: true },
+                    { id: 'avatarShadowY', label: '阴影Y', type: 'range', min: -20, max: 20, hasNum: true },
+                    { id: 'avatarShadowBlur', label: '阴影模糊', type: 'range', min: 0, max: 50, hasNum: true }
+                ]
+            },
+            {
+                title: '头像框 (挂件)',
+                fields: [
+                { id: 'avatarFrame_Ref', label: '挂载位置', type: 'select', options: [
+    ['msg_before', '卡片底层msgb (推荐多图层装饰或楼层计数器或封面图)'],
+['msg_after', '卡片顶层msga (推荐装饰B或装饰C)'],
+['content_before', '气泡底层conb (推荐封面图或背景光效)'],
+['content_after', '气泡顶层cona (推荐装饰C)'],
+['avatar_before', '头像底层avab (推荐装饰A)'],
+['avatar_after', '头像顶层avaa (推荐头像框)']
+]},
+                    { id: 'avatarFrameUrl', label: '图片URL', type: 'text', hasUpload: true },
+                    { id: 'avatarFrameSize', label: '大小', type: 'range', min: 20, max: 300, hasNum: true },
+                    { id: 'avatarFrameX', label: 'X偏移', type: 'range', min: -100, max: 100, hasNum: true },
+                    { id: 'avatarFrameY', label: 'Y偏移', type: 'range', min: -100, max: 100, hasNum: true }
+                ]
+            }
+        ]
+    },
+    
+    deco: {
+        title: '装饰',
+        groups: [
+            {
+                title: '装饰 A (Avatar::before)',
+                fields: [
+                { id: 'avatarFrame_Ref', label: '挂载位置', type: 'select', options: [
+    ['msg_before', '卡片底层msgb (推荐多图层装饰或楼层计数器或封面图)'],
+['msg_after', '卡片顶层msga (推荐装饰B或装饰C)'],
+['content_before', '气泡底层conb (推荐封面图或背景光效)'],
+['content_after', '气泡顶层cona (推荐装饰C)'],
+['avatar_before', '头像底层avab (推荐装饰A)'],
+['avatar_after', '头像顶层avaa (推荐头像框)']
+]},
+                    { id: 'decoA_Enable', label: '启用', type: 'toggle' },
+        { id: 'decoA_Type', label: '类型', type: 'select', options: [['text', '文字'], ['image', '图片']] },
+        { id: 'decoA_Text', label: '内容', type: 'textarea', showIf: 'decoA_Type=text' },
+        { id: 'decoA_Wrap', label: '换行', type: 'select', options: [['nowrap', '不换行'], ['pre', '手动换行'], ['pre-wrap', '自动+手动']], showIf: 'decoA_Type=text' },
+        { id: 'decoA_Align', label: '对齐', type: 'select', options: [['left', '左对齐'], ['center', '居中'], ['right', '右对齐']], showIf: 'decoA_Type=text' },
+        { id: 'decoA_FontFamily', label: '字体', type: 'select', options: [['inherit', '继承'], ['sans-serif', '无衬线'], ['serif', '衬线'], ['cursive', '手写'], ['monospace', '等宽']], showIf: 'decoA_Type=text' },
+        { id: 'decoA_FontUrl', label: '字体URL', type: 'text', placeholder: 'https://.../font.ttf', showIf: 'decoA_Type=text' },
+        { id: 'decoA_Img', label: '图片', type: 'text', hasUpload: true, showIf: 'decoA_Type=image' },
+        { id: 'decoA_Size', label: '字号/尺寸', type: 'range', min: 8, max: 200, hasNum: true },
+        { id: 'decoA_Spacing', label: '字距', type: 'range', min: -5, max: 30, step: 0.5, hasNum: true, showIf: 'decoA_Type=text' },  // ★ 新增
+        { id: 'decoA_LineHeight', label: '行距', type: 'range', min: 0.8, max: 3, step: 0.1, hasNum: true, showIf: 'decoA_Type=text' },  // ★ 新增
+        { id: 'decoA_X', label: 'X坐标', type: 'range', min: -300, max: 300, hasNum: true },
+        { id: 'decoA_Y', label: 'Y坐标', type: 'range', min: -300, max: 300, hasNum: true },
+        { id: 'decoA_Color', label: '字色', type: 'color', showIf: 'decoA_Type=text' },
+        { id: 'decoA_BgEnable', label: '启用背景', type: 'toggle', showIf: 'decoA_Type=text' },
+        { id: 'decoA_BgColor', label: '背景色', type: 'color_alpha', alphaId: 'decoA_BgOpacity', showIf: 'decoA_BgEnable' },
+        { id: 'decoA_Radius', label: '圆角', type: 'range', min: 0, max: 50, hasNum: true },
+        { id: 'decoA_Blur', label: '毛玻璃', type: 'range', min: 0, max: 20, hasNum: true, showIf: 'decoA_BgEnable' }
+    ]
+            },
+            {
+                title: '装饰 B (Message::after)',
+                fields: [
+                { id: 'decoB_Ref', label: '挂载位置', type: 'select', options: [
+    ['msg_before', '卡片底层msgb (推荐多图层装饰或楼层计数器或封面图)'],
+['msg_after', '卡片顶层msga (推荐装饰B或装饰C)'],
+['content_before', '气泡底层conb (推荐封面图或背景光效)'],
+['content_after', '气泡顶层cona (推荐装饰C)'],
+['avatar_before', '头像底层avab (推荐装饰A)'],
+['avatar_after', '头像顶层avaa (推荐头像框)']
+]},
+                   { id: 'decoB_Enable', label: '启用', type: 'toggle' },
+        { id: 'decoB_Type', label: '类型', type: 'select', options: [['text', '文字'], ['image', '图片']] },
+        { id: 'decoB_Text', label: '内容', type: 'textarea', showIf: 'decoB_Type=text' },
+        { id: 'decoB_Wrap', label: '换行', type: 'select', options: [['nowrap', '不换行'], ['pre', '手动换行'], ['pre-wrap', '自动+手动']], showIf: 'decoB_Type=text' },
+        { id: 'decoB_Align', label: '对齐', type: 'select', options: [['left', '左对齐'], ['center', '居中'], ['right', '右对齐']], showIf: 'decoB_Type=text' },
+        { id: 'decoB_FontFamily', label: '字体', type: 'select', options: [['inherit', '继承'], ['sans-serif', '无衬线'], ['serif', '衬线'], ['cursive', '手写'], ['monospace', '等宽']], showIf: 'decoB_Type=text' },
+        { id: 'decoB_FontUrl', label: '字体URL', type: 'text', placeholder: 'https://.../font.ttf', showIf: 'decoB_Type=text' },
+        { id: 'decoB_Img', label: '图片', type: 'text', hasUpload: true, showIf: 'decoB_Type=image' },
+        { id: 'decoB_Size', label: '字号/尺寸', type: 'range', min: 8, max: 200, hasNum: true },
+        { id: 'decoB_Spacing', label: '字距', type: 'range', min: -5, max: 30, step: 0.5, hasNum: true, showIf: 'decoB_Type=text' },  // ★ 新增
+        { id: 'decoB_LineHeight', label: '行距', type: 'range', min: 0.8, max: 3, step: 0.1, hasNum: true, showIf: 'decoB_Type=text' },  // ★ 新增
+        { id: 'decoB_X', label: 'X坐标', type: 'range', min: -300, max: 300, hasNum: true },
+        { id: 'decoB_Y', label: 'Y坐标', type: 'range', min: -300, max: 300, hasNum: true },
+        { id: 'decoB_Color', label: '字色', type: 'color', showIf: 'decoB_Type=text' },
+        { id: 'decoB_BgEnable', label: '启用背景', type: 'toggle', showIf: 'decoB_Type=text' },
+        { id: 'decoB_BgColor', label: '背景色', type: 'color_alpha', alphaId: 'decoB_BgOpacity', showIf: 'decoB_BgEnable' },
+        { id: 'decoB_Radius', label: '圆角', type: 'range', min: 0, max: 50, hasNum: true },
+        { id: 'decoB_Blur', label: '毛玻璃', type: 'range', min: 0, max: 20, hasNum: true, showIf: 'decoB_BgEnable' }
+    ]
+            },
+            {
+                title: '装饰 C (Content::after)',
+                fields: [
+                { id: 'decoC_Ref', label: '挂载位置', type: 'select', options: [
+    ['msg_before', '卡片底层msgb (推荐多图层装饰或楼层计数器或封面图)'],
+['msg_after', '卡片顶层msga (推荐装饰B或装饰C)'],
+['content_before', '气泡底层conb (推荐封面图或背景光效)'],
+['content_after', '气泡顶层cona (推荐装饰C)'],
+['avatar_before', '头像底层avab (推荐装饰A)'],
+['avatar_after', '头像顶层avaa (推荐头像框)']
+]},
+                    { id: 'decoC_Enable', label: '启用', type: 'toggle' },
+                    { id: 'decoC_Type', label: '类型', type: 'select', options: [['text', '文字'], ['image', '图片']] },
+                    { id: 'decoC_Text', label: '内容', type: 'textarea', showIf: 'decoC_Type=text' },
+                    { id: 'decoC_Wrap', label: '换行', type: 'select', options: [['nowrap', '不换行'], ['pre', '手动换行'], ['pre-wrap', '自动+手动']], showIf: 'decoC_Type=text' },
+                    { id: 'decoC_Align', label: '对齐', type: 'select', options: [['left', '左对齐'], ['center', '居中'], ['right', '右对齐']], showIf: 'decoC_Type=text' },
+                    { id: 'decoC_FontFamily', label: '字体', type: 'select', options: [['inherit', '继承'], ['sans-serif', '无衬线'], ['serif', '衬线'], ['cursive', '手写'], ['monospace', '等宽']], showIf: 'decoC_Type=text' },
+                    { id: 'decoC_FontUrl', label: '字体URL', type: 'text', placeholder: 'https://.../font.ttf', showIf: 'decoC_Type=text' },
+                    { id: 'decoC_Img', label: '图片', type: 'text', hasUpload: true, showIf: 'decoC_Type=image' },
+                    { id: 'decoC_Size', label: '字号/尺寸', type: 'range', min: 8, max: 200, hasNum: true },
+                    { id: 'decoC_Spacing', label: '字间距', type: 'range', min: 0, max: 20, step: 0.5, hasNum: true, showIf: 'decoC_Type=text' },
+                   
+{ id: 'decoC_LineHeight', label: '行距', type: 'range', min: 0.8, max: 3, step: 0.1, hasNum: true, showIf: 'decoC_Type=text' },  // ★ 新增
+                    { id: 'decoC_X', label: 'X坐标', type: 'range', min: -600, max: 600, hasNum: true },
+                    { id: 'decoC_Y', label: 'Y坐标', type: 'range', min: -600, max: 600, hasNum: true },
+                    { id: 'decoC_Color', label: '字色', type: 'color', showIf: 'decoC_Type=text' },
+                    { id: 'decoC_Opacity', label: '透明度', type: 'range', min: 0, max: 100, hasNum: true },
+                    { id: 'decoC_BgEnable', label: '启用背景', type: 'toggle', showIf: 'decoC_Type=text' },
+                    { id: 'decoC_BgColor', label: '背景色', type: 'color_alpha', alphaId: 'decoC_BgOpacity', showIf: 'decoC_BgEnable' },
+                    { id: 'decoC_Radius', label: '圆角', type: 'range', min: 0, max: 50, hasNum: true },
+                    { id: 'decoC_Blur', label: '毛玻璃', type: 'range', min: 0, max: 20, hasNum: true, showIf: 'decoC_BgEnable' }
+                ]
+            },
+            {
+    title: '多图层装饰',
+    custom: true,
+    html: `
+        <div class="form-row">
+            <span class="form-label">挂载位置</span>
+            <select id="decoLayers_Ref" onchange="updateDecoLayersRef(this.value)">
+                <option value="msg_before">卡片底层 msgb (推荐多图层装饰楼层计数器或封面图)</option>
+                <option value="msg_after">卡片顶层 msga (推荐装饰B或装饰C)</option>
+                <option value="content_before">气泡底层 conb (推荐封面或者背景光效)</option>
+                <option value="content_after">气泡顶层 cona (推荐装饰C)</option>
+            </select>
+        </div>
+        <div style="font-size:10px;color:#f59e0b;margin:6px 0;">避免与其他装饰挂载点重复</div>
+        <div id="decoLayerList"></div>
+        <button class="btn-sm" onclick="addDecoLayer()" style="width:100%;margin-top:8px;">+ 添加图层</button>
+    `
+}
+        ]
+    },
+    
+    content: {
+        title: '内容',
+        groups: [
+            {
+                title: '字体设置',
+                fields: [
+                    { id: 'fontFamily', label: '预设字体', type: 'select', options: [
+                        ['inherit', '继承通用'],
+                        ['system-ui', '系统默认'],
+                        ['sans-serif', '无衬线'],
+                        ['serif', '衬线'],
+                        ['cursive', '手写体'],
+                        ['monospace', '等宽']
+                    ]},
+                    { id: 'customFontUrl', label: '字体URL', type: 'text', placeholder: 'https://.../font.ttf' }
+                ]
+            },
+            {
+                title: '文字样式',
+                fields: [
+                    { id: 'textContent', label: '文本内容', type: 'textarea' },
+                    { id: 'textColor', label: '颜色', type: 'color' },
+                    { id: 'textSize', label: '字号', type: 'range', min: 10, max: 40, hasNum: true },
+                    { id: 'textLineHeight', label: '行高', type: 'range', min: 10, max: 60, hasNum: true },
+                    { id: 'textSpacing', label: '字距', type: 'range', min: -2, max: 20, step: 0.5, hasNum: true },  // ★ 确保这行存在
+            ],
+            },
+            {
+                title: '内边距 (Padding)',
+                fields: [
+                    { id: 'contentPaddingTop', label: '上边距', type: 'range', min: 0, max: 400, hasNum: true },
+                    { id: 'contentPaddingBottom', label: '下边距', type: 'range', min: 0, max: 200, hasNum: true },
+                    { id: 'contentPadding', label: '左右边距', type: 'range', min: 0, max: 100, hasNum: true }
+                ]
+            },
+            {
+                title: '高级自定义 CSS',
+                fields: [
+                    { id: 'customCss', label: 'CSS代码', type: 'textarea', placeholder: '在此处输入CSS，支持识别颜色...' }
+                ]
+            }
+        ]
+    },
+    counter: {
+    title: '楼层计数',
+    groups: [
+        {
+            title: '计数器设置',
+            fields: [
+                { id: 'counterEnable', label: '启用', type: 'toggle' },
+                { id: 'counter_Ref', label: '挂载位置', type: 'select', options: [
+                    ['msg_before', '卡片底层msgb (推荐多图层装饰或楼层计数器或封面图)'],
+['msg_after', '卡片顶层msga (推荐装饰B或装饰C)'],
+['content_before', '气泡底层conb (推荐封面图或背景光效)'],
+['content_after', '气泡顶层cona (推荐装饰C)'],
+['avatar_before', '头像底层avab (推荐装饰A)'],
+['avatar_after', '头像顶层avaa (推荐头像框)']
+                ]},
+                { id: 'counterStyle', label: '数字样式', type: 'select', options: [
+                    ['decimal', '阿拉伯 (1, 2, 3)'],
+                    ['cjk-ideographic', '中文小写 (一, 二, 三)'],
+                    ['simp-chinese-formal', '中文大写 (壹, 贰, 叁)'],
+                    ['upper-roman', '罗马大写 (Ⅰ, Ⅱ, Ⅲ)'],
+                    ['lower-roman', '罗马小写 (ⅰ, ⅱ, ⅲ)'],
+                    ['upper-alpha', '字母大写 (A, B, C)'],
+                    ['lower-alpha', '字母小写 (a, b, c)'],
+                    ['decimal-leading-zero', '前导零 (01, 02)'],
+                    ['cjk-earthly-branch', '地支 (子, 丑, 寅)'],
+                    ['cjk-heavenly-stem', '天干 (甲, 乙, 丙)'],
+                    ['custom', '完全自定义']
+                ]},
+                { id: 'counterCustomSystem', label: '循环方式', type: 'select', options: [
+                    ['cyclic', '循环 (超出后从头)'],
+                    ['fixed', '固定 (超出显示数字)'],
+                    ['symbolic', '叠加 (①①, ①②...)']
+                ], showIf: 'counterStyle=custom' },
+                { id: 'counterCustomSymbols', label: '自定义符号', type: 'textarea', placeholder: '每个符号用空格分隔，如：\n① ② ③ ④ ⑤\n或：🐱 🐶 🐰 🦊 🐻\n或：壹 贰 叁 肆 伍', showIf: 'counterStyle=custom' },
+                { id: 'counterPrefix', label: '前缀', type: 'text', placeholder: '如: 第 或 【' },
+                { id: 'counterSuffix', label: '后缀', type: 'text', placeholder: '如: 层 或 F】' },
+                { id: 'counterPosition', label: '水平位置', type: 'select', options: [
+                    ['right', '右侧'],
+                    ['left', '左侧'],
+                    ['center', '居中']
+                ]},
+                { id: 'counterX', label: 'X偏移', type: 'range', min: -300, max: 400, hasNum: true },
+                { id: 'counterY', label: 'Y偏移', type: 'range', min: -300, max: 500, hasNum: true },
+                { id: 'counterSize', label: '字号', type: 'range', min: 8, max: 72, hasNum: true },
+                { id: 'counterColor', label: '颜色', type: 'color_alpha', alphaId: 'counterOpacity' }
+            ]
+        },
+        {
+            title: '计数器字体',
+            fields: [
+                { id: 'counterFontFamily', label: '预设字体', type: 'select', options: [
+                    ['inherit', '继承'],
+                    ['sans-serif', '无衬线'],
+                    ['serif', '衬线'],
+                    ['monospace', '等宽'],
+                    ['cursive', '手写'],
+                    ['fantasy', '装饰体']
+                ]},
+                { id: 'counterFontUrl', label: '字体URL', type: 'text', placeholder: ' URL' }
+            ]
+        },
+        {
+            title: '计数器背景',
+            fields: [
+                { id: 'counterBgEnable', label: '启用背景', type: 'toggle' },
+                { id: 'counterBgColor', label: '背景色', type: 'color_alpha', alphaId: 'counterBgOpacity', showIf: 'counterBgEnable' },
+                { id: 'counterRadius', label: '圆角', type: 'range', min: 0, max: 50, hasNum: true, showIf: 'counterBgEnable' }
+            ]
+        },
+        {
+            title: '预设符号库',
+            custom: true,
+            html: `
+                <div style="font-size:10px;color:#666;margin-bottom:8px;">点击快速填入自定义符号：</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    <button class="btn-sm" onclick="fillCounterSymbols('① ② ③ ④ ⑤ ⑥ ⑦ ⑧ ⑨ ⑩')">①②③</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('❶ ❷ ❸ ❹ ❺ ❻ ❼ ❽ ❾ ❿')">❶❷❸</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('⓵ ⓶ ⓷ ⓸ ⓹ ⓺ ⓻ ⓼ ⓽ ⓾')">⓵⓶⓷</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('Ⅰ Ⅱ Ⅲ Ⅳ Ⅴ Ⅵ Ⅶ Ⅷ Ⅸ Ⅹ')">Ⅰ Ⅱ Ⅲ</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('壹 贰 叁 肆 伍 陆 柒 捌 玖 拾')">壹贰叁</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('一 二 三 四 五 六 七 八 九 十')">一二三</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('甲 乙 丙 丁 戊 己 庚 辛 壬 癸')">甲乙丙</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('子 丑 寅 卯 辰 巳 午 未 申 酉 戌 亥')">子丑寅</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('🌸 🌺 🌹 🌷 🌻 🌼 💐 🪷 🌱 🌿')">🌸花朵</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('🐱 🐶 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮')">🐱动物</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('⭐ ✨ 💫 🌟 ⚡ 🔥 💖 💎 🎀 🎈')">⭐符号</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('𝟙 𝟚 𝟛 𝟜 𝟝 𝟞 𝟟 𝟠 𝟡 𝟙𝟘')">𝟙花体</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('𝔸 𝔹 ℂ 𝔻 𝔼 𝔽 𝔾 ℍ 𝕀 𝕁')">𝔸空心</button>
+                    <button class="btn-sm" onclick="fillCounterSymbols('𝒜 ℬ 𝒞 𝒟 ℰ ℱ 𝒢 ℋ ℐ 𝒥')">𝒜花体</button>
+                </div>
+                <div style="margin-top:10px;padding:10px;background:#f5f5f5;border-radius:6px;text-align:center;">
+                    <div style="font-size:10px;color:#888;margin-bottom:4px;">效果预览</div>
+                    <span id="counterPreview" style="font-size:16px;color:#333;">#1</span>
+                </div>
+            `
+        }
+    ]
+},
+};
+
+// ==================== 逻辑处理 ====================
+function switchRole(role) {
+    currentRole = role;
+    document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`.role-btn[data-role="${role}"]`).classList.add('active');
+    renderTabs();
+    render();
+}
+
+function renderTabs() {
+    const tabsContainer = document.getElementById('tabsContainer');
+    const panelsContainer = document.getElementById('panelsContainer');
+    
+    let panels = currentRole === 'common' ? commonPanels : rolePanels;
+    
+    if (currentRole !== 'common') {
+        panels = { ...panels, export: commonPanels.export };
+    }
+    
+    tabsContainer.innerHTML = Object.entries(panels).map(([key, panel], i) => 
+        `<div class="tab-item ${i === 0 ? 'active' : ''}" onclick="switchTab('${key}')">${panel.title}</div>`
+    ).join('');
+    
+    panelsContainer.innerHTML = Object.entries(panels).map(([key, panel], i) => 
+        `<div class="panel ${i === 0 ? 'active' : ''}" id="panel-${key}">
+            ${renderPanel(panel)}
+        </div>`
+    ).join('');
+    
+    bindEvents();
+      setTimeout(initEncryptEvents, 50);
+
+}
+
+function renderPanel(panel) {
+    return panel.groups.map(group => {
+        if (group.custom) {
+            return `<div class="control-group"><div class="group-title">${group.title}</div>${group.html}</div>`;
+        }
+        return `
+            <div class="control-group">
+                <div class="group-title">
+                    <span>${group.title}</span>
+                    ${currentRole !== 'common' ? `<button class="sync-btn" onclick="syncToOther('${group.fields.map(f=>f.id).join(',')}')">同步→</button>` : ''}
+                </div>
+                ${group.fields.map(f => renderField(f)).join('')}
+            </div>
+        `;
+    }).join('');
+}
+
+function renderField(field) {
+    const config = currentRole === 'common' ? commonConfig : (currentRole === 'user' ? userConfig : aiConfig);
+    const value = config[field.id] ?? '';
+    
+    // 【新增】判断当前是否是角色配置（通用配置没有 bubbleMode）
+    const isRoleConfig = currentRole === 'user' || currentRole === 'ai';
+    const bubbleMode = isRoleConfig && config.bubbleMode;
+    
+    let input = '';
+    const needsPalette = ['cardBgCss', 'customCss'].includes(field.id);
+    const paletteHtml = needsPalette ? `
+        <div class="palette-row" id="${field.id}_palette"></div>
+        <div style="display:flex; gap:6px; margin-top:4px;">
+            <button class="btn-sm" style="flex:1" onclick="addGradientColor('${field.id}')">+ 添加颜色</button>
+            <button class="btn-sm" style="flex:1" onclick="generateGradient('${field.id}')">+ 生成渐变</button>
+        </div>
+    ` : '';
+    
+    switch (field.type) {
+        case 'range':
+            input = `
+                <div class="slider-row">
+                    <input type="range" id="${field.id}" min="${field.min}" max="${field.max}" step="${field.step||1}" value="${value}">
+                    ${field.hasNum ? `<input type="number" id="${field.id}_num" class="num-input" value="${value}">` : ''}
+                </div>`;
+            break;
+        case 'color':
+            input = `<input type="color" id="${field.id}" value="${value}">`;
+            break;
+        case 'color_alpha':
+            const alphaVal = config[field.alphaId] ?? 100;
+            input = `
+                <div class="slider-row">
+                    <input type="color" id="${field.id}" value="${value}">
+                    <span class="sub-label">A:</span>
+                    <input type="range" id="${field.alphaId}" min="0" max="100" value="${alphaVal}" style="width:60px">
+                    <span id="${field.alphaId}_disp" style="font-size:9px;width:20px">${alphaVal}%</span>
+                </div>`;
+            break;
+        case 'text':
+            input = `
+                <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                    <div style="display:flex; gap:4px; width:100%;">
+                        <input type="text" id="${field.id}" value="${value}" placeholder="${field.placeholder || ''}">
+                        ${field.hasUpload ? `<label class="btn-sm" style="cursor:pointer;display:flex;align-items:center;">📂<input type="file" accept="image/*" style="display:none" onchange="handleUpload(this, '${field.id}')"></label>` : ''}
+                    </div>
+                    ${paletteHtml}
+                </div>`;
+            break;
+        case 'textarea':
+            input = `
+                <div style="flex:1; display:flex; flex-direction:column;">
+                    <textarea id="${field.id}" rows="3" style="flex:1;">${value}</textarea>
+                    ${paletteHtml}
+                </div>`;
+            break;
+        case 'select':
+            input = `<select id="${field.id}"> ${field.options.map(([v, l]) => `<option value="${v}" ${value === v ? 'selected' : ''}>${l}</option>`).join('')} </select>`;
+            break;
+        case 'toggle':
+            input = `<div style="flex:1;display:flex;justify-content:flex-end;"><label class="toggle-switch"><input type="checkbox" id="${field.id}" ${value ? 'checked' : ''}><span class="slider"></span></label></div>`;
+            break;
+    }
+    
+    let displayStyle = 'flex';
+    
+    // 【新增】气泡模式隐藏逻辑
+    if (bubbleMode && (field.hideInBubble || field.bubbleHide)) {
+        displayStyle = 'none';
+    }
+    
+    if (field.showIf) {
+        const [condId, condVal] = field.showIf.includes('=') ? field.showIf.split('=') : [field.showIf, 'true'];
+        const currentVal = String(config[condId]);
+        displayStyle = (condVal === 'true' ? config[condId] : currentVal === condVal) ? 'flex' : 'none';
+    }
+    
+    return `<div class="form-row" id="row-${field.id}" style="display:${displayStyle}" data-show-if="${field.showIf || ''}" data-hide-in-bubble="${field.hideInBubble || field.bubbleHide ? 'true' : ''}"><span class="form-label">${field.label}</span>${input}</div>`;
+}
+
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    document.getElementById('panel-' + tabId).classList.add('active');
+}
+
+function bindEvents() {
+    const config = currentRole === 'common' ? commonConfig : (currentRole === 'user' ? userConfig : aiConfig);
+    const allFields = [];
+    const panels = currentRole === 'common' ? commonPanels : rolePanels;
+    Object.values(panels).forEach(p => p.groups.forEach(g => {
+        if(g.fields) g.fields.forEach(f => {
+            allFields.push(f.id);
+            if(f.hasNum) allFields.push(f.id + '_num');
+            if(f.type === 'color_alpha') allFields.push(f.alphaId);
+        });
+    }));
+
+    allFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        
+        // 初始化调色板
+        if (['cardBgCss', 'customCss'].includes(id)) {
+            generatePalette(id);
+        }
+        
+        el.oninput = (e) => {
+            const fieldId = id.replace('_num', '');
+            let val = el.type === 'checkbox' ? el.checked : el.value;
+            if (el.type === 'range' || el.type === 'number') val = parseFloat(val);
+            
+            config[fieldId] = val;
+            // ★ 新增：统一边框粗细同步到四边
+    if (fieldId === 'borderWidth') {
+        config.borderTop = val;
+        config.borderBottom = val;
+        config.borderLeft = val;
+        config.borderRight = val;
+        // 同步UI显示
+        ['borderTop', 'borderBottom', 'borderLeft', 'borderRight'].forEach(bid => {
+            const rangeEl = document.getElementById(bid);
+            const numEl = document.getElementById(bid + '_num');
+            if (rangeEl) rangeEl.value = val;
+            if (numEl) numEl.value = val;
+        });
+    }
+            
+            if (id.endsWith('_num')) {
+                const range = document.getElementById(fieldId);
+                if(range) range.value = val;
+            } else {
+                const num = document.getElementById(fieldId + '_num');
+                if(num) num.value = val;
+                const disp = document.getElementById(fieldId + '_disp');
+                if(disp) disp.innerText = val + '%';
+            }
+            
+            // 如果是高级CSS字段，实时更新调色板
+            if (['cardBgCss', 'customCss'].includes(fieldId)) {
+                generatePalette(fieldId);
+            }
+            
+            updateConditionalFields();
+            render();
+            // 如果是计数器相关字段，更新预览
+if (fieldId.startsWith('counter')) {
+    updateCounterPreview();
+}
+        };
+    });
+    renderDecoLayers();
+    // 更新计数器预览
+updateCounterPreview();
+}
+function updateCounterPreview() {
+    const preview = document.getElementById('counterPreview');
+    if (!preview) return;
+    
+    const config = currentRole === 'user' ? userConfig : aiConfig;
+    const prefix = config.counterPrefix || '';
+    const suffix = config.counterSuffix || '';
+    
+    // 根据样式显示不同的数字
+    let numDisplay = '1';
+    
+    if (config.counterStyle === 'custom' && config.counterCustomSymbols) {
+        // 自定义符号：显示第一个
+        const symbols = config.counterCustomSymbols.trim().split(/\s+/).filter(s => s);
+        numDisplay = symbols[0] || '1';
+    } else {
+        const styleMap = {
+            'decimal': '1',
+            'cjk-ideographic': '一',
+            'simp-chinese-formal': '壹',
+            'upper-roman': 'Ⅰ',
+            'lower-roman': 'ⅰ',
+            'upper-alpha': 'A',
+            'lower-alpha': 'a',
+            'decimal-leading-zero': '01',
+            'cjk-earthly-branch': '子',
+            'cjk-heavenly-stem': '甲'
+        };
+        numDisplay = styleMap[config.counterStyle] || '1';
+    }
+    
+    preview.textContent = `${prefix}${numDisplay}${suffix}`;
+    preview.style.fontSize = config.counterSize + 'px';
+    preview.style.color = hexToRgba(config.counterColor, config.counterOpacity);
+    
+    // 处理字体
+    if (config.counterFontUrl) {
+        preview.style.fontFamily = `'CounterFont-${currentRole}', ${config.counterFontFamily}`;
+    } else {
+        preview.style.fontFamily = config.counterFontFamily !== 'inherit' ? config.counterFontFamily : '';
+    }
+    
+    if (config.counterBgEnable) {
+        preview.style.background = hexToRgba(config.counterBgColor, config.counterBgOpacity);
+        preview.style.padding = '2px 10px';
+        preview.style.borderRadius = config.counterRadius + 'px';
+        preview.style.display = 'inline-block';
+    } else {
+        preview.style.background = 'none';
+        preview.style.padding = '0';
+    }
+}
+function updateConditionalFields() {
+    const config = currentRole === 'common' ? commonConfig : (currentRole === 'user' ? userConfig : aiConfig);
+    
+    // 判断当前是否是角色配置（通用配置没有 bubbleMode）
+    const isRoleConfig = currentRole === 'user' || currentRole === 'ai';
+    const bubbleMode = isRoleConfig && config.bubbleMode;
+    
+    document.querySelectorAll('[data-show-if], [data-hide-in-bubble]').forEach(el => {
+        let shouldShow = true;
+        
+        // 【新增】气泡模式隐藏逻辑
+        if (bubbleMode && el.dataset.hideInBubble === 'true') {
+            shouldShow = false;
+        }
+        
+        // 原有条件显示逻辑
+        if (shouldShow && el.dataset.showIf) {
+            const cond = el.dataset.showIf;
+            const [condId, condVal] = cond.includes('=') ? cond.split('=') : [cond, 'true'];
+            const currentVal = String(config[condId]);
+            shouldShow = (condVal === 'true' ? config[condId] : currentVal === condVal);
+        }
+        
+        el.style.display = shouldShow ? 'flex' : 'none';
+    });
+}
+
+function syncToOther(fieldIds) {
+    const source = currentRole === 'user' ? userConfig : aiConfig;
+    const target = currentRole === 'user' ? aiConfig : userConfig;
+    fieldIds.split(',').forEach(id => {
+        if (source[id] !== undefined) target[id] = source[id];
+    });
+    showToast(`已同步到 ${currentRole === 'user' ? 'AI' : 'User'}`);
+    render();
+}
+
+// ==================== CSS 生成核心 ====================
+
+function hexToRgba(hex, opacity) {
+    if (!hex) return 'transparent';
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+        r = parseInt(hex[1] + hex[1], 16);
+        g = parseInt(hex[2] + hex[2], 16);
+        b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) {
+        r = parseInt(hex.substring(1, 3), 16);
+        g = parseInt(hex.substring(3, 5), 16);
+        b = parseInt(hex.substring(5, 7), 16);
+    }
+    return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+}
+
+function generateRoleCSS(role, config, prefix, isExport = false) {
+    const c = commonConfig;
+// === 新增辅助函数：解析挂载点 ===
+const getSelector = (refKey) => {
+    const ref = config[refKey]; // 获取当前配置的挂载点，例如 'msg_before'
+    const [target, pseudo] = ref ? ref.split('_') : ['msg', 'after']; // 防止空值报错
+    
+    let baseSel = '';
+    if (target === 'msg') baseSel = msgSelector;
+    else if (target === 'content') baseSel = contentSelector;
+    else if (target === 'avatar') baseSel = avatarSelector;
+    
+    return `${baseSel}::${pseudo}`;
+};
+// 【新增】生成特效CSS
+
+    
+    // 【修改】优先使用角色独立字体，否则继承通用
+    let fontName = config.fontFamily || c.fontFamily;
+    
+    // 角色有自定义字体URL时优先使用
+    if (config.customFontUrl) {
+        fontName = `'CustomFont-${role}'`;
+    } else if (fontName === 'inherit' && c.customFontUrl) {
+        fontName = "'CustomFont'";
+    } else if (fontName === 'inherit') {
+        fontName = c.fontFamily;
+    } else if (!['sans-serif', 'serif', 'monospace', 'cursive', 'system-ui', 'inherit'].includes(fontName)) {
+        fontName = `'${fontName}'`;
+    }
+    if (c.customFontUrl) fontName = "'CustomFont'";
+    else if (!['sans-serif', 'serif', 'monospace', 'cursive', 'system-ui'].includes(fontName)) fontName = `'${fontName}'`;
+
+    const msgSelector = prefix;
+    const contentSelector = prefix.includes('preview') 
+        ? prefix.replace('preview-message', 'preview-content').replace('#preview-', '#content-')
+        : `${prefix} .offline-message-content`;
+    const avatarSelector = prefix.includes('preview')
+        ? prefix.replace('preview-message', 'preview-avatar').replace('#preview-', '#avatar-')
+        : `${prefix} .offline-avatar`;
+    const textSelector = prefix.includes('preview') ? `${prefix} .preview-text` : `${prefix} .offline-message-text`;
+
+    let bgStyle = '';
+    if (config.cardBgCss) {
+        bgStyle = `background: ${config.cardBgCss} !important;`;
+    } else if (config.useGradient) {
+        const c1 = hexToRgba(config.cardBgColor, config.cardBgOpacity);
+        const c2 = hexToRgba(config.cardBgColor2, config.cardBgOpacity2);
+        bgStyle = `background: linear-gradient(${config.gradientDirection}, ${c1} 0%, ${c2} 100%) !important;`;
+    } else {
+        bgStyle = `background-color: ${hexToRgba(config.cardBgColor, config.cardBgOpacity)} !important;`;
+    }
+    if (config.cardBgImg) {
+    const bgSize = config.bgSizeFill ? 'cover' : `${config.bgScale}%`;
+    bgStyle += `background-image: url('${config.cardBgImg}') !important; background-size: ${bgSize} !important; background-position: ${config.bgPosX}% ${config.bgPosY}% !important; background-repeat: no-repeat !important;`;
+}
+
+    let avatarStyle = '';
+    if (config.avatarAbsolute) {
+        avatarStyle = `
+            position: absolute !important; 
+            top: ${config.avatarYOffset}px !important; 
+            left: 50% !important; 
+            transform: translate(calc(-50% + ${config.avatarXOffset}px), calc(-50% + ${config.avatarYOffset}px)) !important;
+            z-index: ${config.avatarZIndex} !important;
+            margin: 0 !important;
+        `;
+    } else {
+        avatarStyle = `position: relative !important; margin: 0 10px !important; flex-shrink: 0 !important;`;
+    }
+
+    const genDeco = (type, text, img, x, y, color, bgEnable, bg, radius, blur, size, wrap, align, fontFamily, fontUrl, role, decoName, spacing, lineHeight) => {
+    //处理换行符
+    const escapedText = type === 'image' ? '' : text.replace(/\n/g, '\\A');
+    const bgImg = type === 'image' ? `background-image: url('${img}') !important; background-size: contain !important; background-repeat: no-repeat !important; width: ${size}px !important; height: ${size}px !important;` : '';
+    const bgStyle = (type === 'text' && bgEnable) ? `background-color: ${bg} !important; padding: 4px 8px !important; backdrop-filter: blur(${blur}px) !important;` : '';
+    
+    // 处理字体
+    let fontStyle = '';
+    if (fontUrl) {
+        fontStyle = `font-family: 'Deco-${role}-${decoName}' !important;`;
+    } else if (fontFamily && fontFamily !== 'inherit') {
+        fontStyle = `font-family: ${fontFamily} !important;`;
+    }
+    
+    return `
+        content: '${escapedText}' !important;
+        position: absolute !important;
+        top: 50% !important; left: 50% !important;
+        transform: translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) !important;
+        color: ${color} !important;
+        font-size: ${size}px !important;
+        letter-spacing: ${spacing || 0}px !important;
+        line-height: ${lineHeight || 1.5} !important;
+        ${fontStyle}
+        ${bgStyle}
+        ${bgImg}
+        border-radius: ${radius}px !important;
+        z-index: 25 !important;
+        pointer-events: none !important;
+        white-space: ${wrap || 'nowrap'} !important;
+        text-align: ${align || 'center'} !important;
+    `;
+};
+// 【修改】根据气泡模式决定背景放在哪里
+    let msgBgStyle = '';
+    let contentBgStyle = '';
+    
+    if (config.bubbleMode) {
+        // 气泡模式：背景放在 content 上，message 透明
+        msgBgStyle = 'background: transparent !important;';
+        contentBgStyle = bgStyle;
+    } else {
+        // 卡片模式：背景放在 message 上
+        msgBgStyle = bgStyle;
+        contentBgStyle = '';
+    }
+
+    // 【修改】CSS 生成部分
+  let css = `
+${msgSelector} {
+    display: flex !important;
+    flex-direction: ${config.bubbleMode ? (role === 'user' ? 'row-reverse' : 'row') : c.flexDirection} !important;
+    align-items: ${config.bubbleMode ? 'flex-start' : c.alignItems} !important;
+    justify-content: ${config.bubbleMode ? 'flex-start' : c.justifyContent} !important;
+    gap: ${config.bubbleMode ? '10px' : '0'} !important;
+    width: ${config.bubbleMode ? '100%' : c.cardWidth + 'px'} !important;
+    max-width: ${config.bubbleMode ? '100%' : c.cardWidth + 'px'} !important;
+    margin: ${config.bubbleMode ? '0 0 10px 0' : `0 auto ${c.marginBottom}px auto`} !important;
+    ${config.bubbleMode 
+        ? `align-self: ${role === 'user' ? 'flex-end' : 'flex-start'} !important;` 
+        : 'align-self: center !important;'}
+    min-height: ${config.bubbleMode ? 'auto' : c.cardMinHeight + 'px'} !important;
+    border-radius: ${c.cardRadius}px !important;
+    
+    ${config.bubbleMode ? '' : `
+    /* 边框设置 */
+${config.borderTop > 0 ? `border-top: ${config.borderTop}px ${config.borderStyle || 'solid'} ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;` : ''}
+${config.borderBottom > 0 ? `border-bottom: ${config.borderBottom}px ${config.borderStyle || 'solid'} ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;` : ''}
+${config.borderLeft > 0 ? `border-left: ${config.borderLeft}px ${config.borderStyle || 'solid'} ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;` : ''}
+${config.borderRight > 0 ? `border-right: ${config.borderRight}px ${config.borderStyle || 'solid'} ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;` : ''}
+    box-shadow: ${config.cardShadowX}px ${config.cardShadowY}px ${config.cardShadowBlur}px ${config.cardShadowSpread}px ${hexToRgba(config.cardShadowColor, config.cardShadowOpacity)} !important;
+    `}
+    
+    overflow: ${c.cardOverflow ? 'hidden' : 'visible'} !important;
+position: relative !important;
+${msgBgStyle}
+}
+
+${contentSelector} {
+    padding: ${config.bubbleMode ? '10px 16px' : `${config.contentPaddingTop}px ${config.contentPadding}px ${config.contentPaddingBottom}px ${config.contentPadding}px`} !important;
+    position: relative !important;
+    ${config.bubbleMode ? 'width: auto' : 'width: 100%'} !important;
+    box-sizing: border-box !important;
+    z-index: 2 !important;
+    overflow: visible !important;  /* ★ 新增：允许装饰溢出 */
+    ${contentBgStyle}${config.bubbleMode ? `border-radius: ${c.cardRadius}px !important;
+    border-top: ${config.borderTop}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
+    border-bottom: ${config.borderBottom}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
+    border-left: ${config.borderLeft}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
+    border-right: ${config.borderRight}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
+    box-shadow: ${config.cardShadowX}px ${config.cardShadowY}px ${config.cardShadowBlur}px ${config.cardShadowSpread}px ${hexToRgba(config.cardShadowColor, config.cardShadowOpacity)} !important;
+    ` : ''}
+    ${config.animationProp ? `animation: ${config.animationProp} !important;` : ''}
+}
+
+${textSelector} {
+    color: ${config.textColor} !important;
+    font-size: ${config.textSize}px !important;
+    line-height: ${config.textLineHeight}px !important;
+    text-align: ${config.textAlign} !important;
+    letter-spacing: ${config.textSpacing}px !important;
+    font-family: ${fontName} !important;
+    position: relative !important;
+    z-index: 3 !important;
+}
+
+${avatarSelector} {
+    width: ${config.avatarSize}px !important;
+    height: ${config.avatarSize}px !important;
+    border-radius: ${config.avatarRadius}% !important;
+    ${config.bubbleMode ? 'position: relative !important; flex-shrink: 0 !important; margin: 0 !important;' : avatarStyle}
+    overflow: visible !important;
+    box-shadow: ${config.avatarShadowX}px ${config.avatarShadowY}px ${config.avatarShadowBlur}px ${hexToRgba(config.avatarShadowColor, config.avatarShadowOpacity)} !important;
+}
+
+${avatarSelector} img {
+    width: 100% !important; height: 100% !important;
+    object-fit: cover !important;
+    border-radius: ${config.avatarRadius}% !important;
+    border: ${config.avatarBorderWidth}px solid ${hexToRgba(config.avatarBorderColor, config.avatarBorderOpacity)} !important;
+    display: block !important;
+}
+`;
+
+    if (config.customCss) {
+        let processedCss = config.customCss
+            .replace(/%CONTENT%/g, contentSelector)
+            .replace(/%MESSAGE%/g, msgSelector)
+            .replace(/%AVATAR%/g, avatarSelector);
+        css += `\n/* Custom CSS */\n${processedCss}\n`;
+    }
+
+    if (config.posterEnable && config.posterImg) {
+    const pos = config.posterPosition || 'top';
+    const isHorizontal = pos === 'top' || pos === 'bottom';
+    const size = config.posterHeight;
+    
+    // 遮罩方向
+    let maskDir = 'to bottom';
+    if (pos === 'bottom') maskDir = 'to top';
+    else if (pos === 'left') maskDir = 'to right';
+    else if (pos === 'right') maskDir = 'to left';
+    
+    let mask = 'none';
+    if (config.posterMaskTop > 0 || config.posterMaskBottom > 0) {
+        const topStop = (config.posterMaskTop / size) * 100;
+        const bottomStop = 100 - (config.posterMaskBottom / size) * 100;
+        mask = `linear-gradient(${maskDir}, transparent 0%, black ${topStop}%, black ${bottomStop}%, transparent 100%)`;
+    }
+    
+    // 定位
+    let posStyle = '';
+    let sizeStyle = '';
+    let bgSize = config.posterSizeFill ? 'cover' : (isHorizontal ? '100% auto' : 'auto 100%');
+    let bgPos = isHorizontal ? `center ${config.posterPos}%` : `${config.posterPos}% center`;
+    
+    switch (pos) {
+        case 'top':
+            posStyle = 'top: 0; left: 0;';
+            sizeStyle = `width: 100%; height: ${size}px;`;
+            break;
+        case 'bottom':
+            posStyle = 'bottom: 0; left: 0;';
+            sizeStyle = `width: 100%; height: ${size}px;`;
+            break;
+        case 'left':
+            posStyle = 'top: 0; left: 0;';
+            sizeStyle = `width: ${size}px; height: 100%;`;
+            break;
+        case 'right':
+            posStyle = 'top: 0; right: 0;';
+            sizeStyle = `width: ${size}px; height: 100%;`;
+            break;
+    }
+    
+    // === 修改：使用动态选择器 ===
+css += `${getSelector('poster_Ref')} { 
+        content: '' !important; 
+        position: absolute !important; 
+        ${posStyle}
+        ${sizeStyle}
+        background-image: url('${config.posterImg}') !important; 
+        background-size: ${bgSize} !important; 
+        background-position: ${bgPos} !important; 
+        background-repeat: no-repeat !important;
+        z-index: 1 !important; 
+        -webkit-mask-image: ${mask} !important; 
+        mask-image: ${mask} !important;
+    }\n`;
+}
+
+    // Content::after = 装饰C + 多图层背景
+const hasDecoC = config.decoC_Enable && (config.decoC_Text || config.decoC_Type === 'image');
+const hasLayers = config.decoLayers && config.decoLayers.filter(l => l.url).length > 0;
+
+if (config.decoC_Enable) {
+    const isImg = config.decoC_Type === 'image';
+    const decoText = isImg ? '' : (config.decoC_Text || '').replace(/\n/g, '\\A ');
+    const bgStyle = (!isImg && config.decoC_BgEnable) 
+        ? `background-color: ${hexToRgba(config.decoC_BgColor, config.decoC_BgOpacity)} !important; padding: 4px 8px !important; backdrop-filter: blur(${config.decoC_Blur}px) !important;` 
+        : '';
+    
+    let fontStyleC = '';
+    if (config.decoC_FontUrl) {
+        fontStyleC = `font-family: 'Deco-${role}-C' !important;`;
+    } else if (config.decoC_FontFamily && config.decoC_FontFamily !== 'inherit') {
+        fontStyleC = `font-family: ${config.decoC_FontFamily} !important;`;
+    }
+    
+    //★ 修复尺寸
+    let sizeStyle = '';
+    if (isImg) {
+        sizeStyle = `
+            background-image: url('${config.decoC_Img}') !important;
+            background-size: contain !important;
+            background-repeat: no-repeat !important;
+            width: ${config.decoC_Size}px !important;
+            height: ${config.decoC_Size}px !important;
+        `;
+    } else {
+        sizeStyle = `
+            width: auto !important;
+            height: auto !important;
+        `;
+    }
+    
+    css += `${getSelector('decoC_Ref')} {
+        content: '${decoText}' !important;
+        position: absolute !important;
+        top: 50% !important; left: 50% !important;
+        transform: translate(calc(-50% + ${config.decoC_X}px), calc(-50% + ${config.decoC_Y}px)) !important;
+        color: ${hexToRgba(config.decoC_Color, config.decoC_Opacity)} !important;
+        font-size: ${config.decoC_Size}px !important;
+        ${fontStyleC}
+        letter-spacing: ${config.decoC_Spacing || 0}px !important;
+        line-height: ${config.decoC_LineHeight || 1.5} !important;
+        border-radius: ${config.decoC_Radius}px !important;
+        white-space: ${config.decoC_Wrap || 'nowrap'} !important;
+        text-align: ${config.decoC_Align || 'center'} !important;
+        ${bgStyle}
+        ${sizeStyle}
+        pointer-events: none !important;
+        z-index: 10 !important;
+    }\n`;
+}
+
+// 多图层装饰：独立挂载
+if (config.decoLayers && config.decoLayers.filter(l => l.url).length > 0) {
+    const validLayers = config.decoLayers.filter(l => l.url);
+    const urls = validLayers.map(l => `url('${l.url}')`).join(', ');
+    const positions = validLayers.map(l => `${l.x}% ${l.y}%`).join(', ');
+    const sizes = validLayers.map(l => `${l.size}px auto`).join(', ');
+    const repeats = validLayers.map(() => 'no-repeat').join(', ');
+    
+    const layerRef = config.decoLayers_Ref || 'msg_before';
+    const [target, pseudo] = layerRef.split('_');
+    let baseSel = target === 'msg' ? msgSelector : (target === 'content' ? contentSelector : avatarSelector);
+    
+    css += `${baseSel}::${pseudo} {
+        content: '' !important;
+        position: absolute !important;
+        top: 0 !important; left: 0 !important;
+        width: 100% !important; height: 100% !important;
+        background-image: ${urls} !important;
+        background-position: ${positions} !important;
+        background-size: ${sizes} !important;
+        background-repeat: ${repeats} !important;
+        pointer-events: none !important;
+        z-index: 5 !important;
+    }\n`;
+}
+    if (config.avatarFrameUrl) {
+        // === 修改：使用动态选择器 ===
+css += `${getSelector('avatarFrame_Ref')} {  
+            content: '' !important; position: absolute !important; 
+            width: ${config.avatarFrameSize}px !important; height: ${config.avatarFrameSize}px !important; 
+            top: 50% !important; left: 50% !important; 
+            transform: translate(calc(-50% + ${config.avatarFrameX}px), calc(-50% + ${config.avatarFrameY}px)) !important; 
+            background-image: url('${config.avatarFrameUrl}') !important; 
+            background-size: contain !important; background-repeat: no-repeat !important; 
+            z-index: 22 !important; pointer-events: none !important; 
+        }\n`;
+    }
+
+   if (config.decoA_Enable) {
+    const bg = hexToRgba(config.decoA_BgColor, config.decoA_BgOpacity);
+    css += `${getSelector('decoA_Ref')} {
+        ${genDeco(
+            config.decoA_Type, 
+            config.decoA_Text, 
+            config.decoA_Img, 
+            config.decoA_X, 
+            config.decoA_Y, 
+            config.decoA_Color, 
+            config.decoA_BgEnable, 
+            bg, 
+            config.decoA_Radius, 
+            config.decoA_Blur, 
+            config.decoA_Size, 
+            config.decoA_Wrap, 
+            config.decoA_Align, 
+            config.decoA_FontFamily, 
+            config.decoA_FontUrl, 
+            role, 
+            'A',
+            config.decoA_Spacing,// ★ 新增
+            config.decoA_LineHeight    // ★ 新增
+        )}
+    }\n`;
+}
+if (config.decoB_Enable) {
+    const bg = hexToRgba(config.decoB_BgColor, config.decoB_BgOpacity);
+    css += `${getSelector('decoB_Ref')} {
+        ${genDeco(
+            config.decoB_Type, 
+            config.decoB_Text, 
+            config.decoB_Img, 
+            config.decoB_X, 
+            config.decoB_Y, 
+            config.decoB_Color, 
+            config.decoB_BgEnable, 
+            bg, 
+            config.decoB_Radius, 
+            config.decoB_Blur, 
+            config.decoB_Size, 
+            config.decoB_Wrap, 
+            config.decoB_Align, 
+            config.decoB_FontFamily, 
+            config.decoB_FontUrl, 
+            role, 
+            'B',
+            config.decoB_Spacing,      // ★ 新增
+            config.decoB_LineHeight    // ★ 新增
+        )}
+    }\n`;
+}
+if (config.effectType && config.effectType !== 'none') {
+    css += generateEffectCSS(config.effectType, contentSelector);
+}
+// ==================== 楼层计数器 ====================
+if (config.counterEnable) {
+    // 获取挂载选择器
+    const getCounterSelector = () => {
+        const ref = config.counter_Ref || 'msg_before';
+        const [target, pseudo] = ref.split('_');
+        
+        let baseSel = '';
+        if (target === 'msg') baseSel = msgSelector;
+        else if (target === 'content') baseSel = contentSelector;
+        else if (target === 'avatar') baseSel = avatarSelector;
+        
+        return `${baseSel}::${pseudo}`;
+    };
+    
+    // 计算位置
+    let posX = '';
+    let transformExtra = '';
+    if (config.counterPosition === 'left') {
+        posX = `left: ${config.counterX}px !important; right: auto !important;`;
+    } else if (config.counterPosition === 'right') {
+        posX = `right: ${config.counterX}px !important; left: auto !important;`;
+    } else {
+        posX = `left: 50% !important; right: auto !important;`;
+        transformExtra = 'translateX(-50%)';
+    }
+    
+    // 背景样式
+    const counterBg = config.counterBgEnable 
+        ? `background: ${hexToRgba(config.counterBgColor, config.counterBgOpacity)} !important; padding: 2px 10px !important; border-radius: ${config.counterRadius}px !important;`
+        : '';
+    
+    // 处理计数器字体
+    let counterFontStyle = '';
+    const counterFontName = config.counterFontUrl ? `'CounterFont-${role}'` : 
+        (config.counterFontFamily !== 'inherit' ? config.counterFontFamily : 'inherit');
+    if (counterFontName !== 'inherit') {
+        counterFontStyle = `font-family: ${counterFontName} !important;`;
+    }
+    
+    // 转义前后缀
+    const prefix = (config.counterPrefix || '').replace(/'/g, "\\'").replace(/\n/g, '\\A ');
+    const suffix = (config.counterSuffix || '').replace(/'/g, "\\'").replace(/\n/g, '\\A ');
+    
+    // 【新增】处理自定义计数样式
+    let counterStyleName = config.counterStyle || 'decimal';
+    let customCounterCSS = '';
+    
+    if (config.counterStyle === 'custom' && config.counterCustomSymbols) {
+        // 解析自定义符号
+        const symbols = config.counterCustomSymbols.trim().split(/\s+/).filter(s => s);
+        if (symbols.length > 0) {
+            const styleName = `custom-counter-${role}`;
+            counterStyleName = styleName;
+            
+            // 生成 @counter-style 规则
+            const symbolsStr = symbols.map(s => `"${s}"`).join(' ');
+            const system = config.counterCustomSystem || 'cyclic';
+            
+            customCounterCSS = `
+/* 自定义计数样式 */
+@counter-style ${styleName} {
+    system: ${system};
+    symbols: ${symbolsStr};
+    suffix: "";
+}
+`;
+        }
+    }
+    
+    const counterSelector = getCounterSelector();
+    
+    css += customCounterCSS;
+    css += `
+/* ═══ 楼层计数器 ═══ */
+${isExport ? '#offline-mode-overlay' : '#preview-messages'} {
+    counter-reset: floor !important;
+}
+
+${msgSelector} {
+    counter-increment: floor !important;
+}
+
+${counterSelector} {
+    content: '${prefix}' counter(floor, ${counterStyleName}) '${suffix}' !important;
+    position: absolute !important;
+    ${posX}
+    top: ${config.counterY}px !important;
+    ${transformExtra ? `transform: ${transformExtra} !important;` : ''}
+    font-size: ${config.counterSize}px !important;
+    color: ${hexToRgba(config.counterColor, config.counterOpacity)} !important;
+    ${counterFontStyle}
+    ${counterBg}
+    z-index: 100 !important;
+    pointer-events: none !important;
+    white-space: nowrap !important;
+    line-height: 1.4 !important;
+}
+`;
+}
+    return css;
+}
+
+
+// ==================== 特效CSS生成 ====================
+function generateEffectCSS(effectType, contentSelector) {
+    if (!effectType || effectType === 'none') return '';
+    
+    const effects = {
+        jelly: `
+/*  果冻感特效 */
+${contentSelector} {
+    background: linear-gradient(135deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.4) 100%) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    box-shadow: 
+        0 8px 32px rgba(0,0,0,0.08),
+        inset 0 2px 8px rgba(255,255,255,0.7),
+        inset 0 -2px 8px rgba(0,0,0,0.05) !important;
+    border: 1px solid rgba(255,255,255,0.6) !important;
+}
+`,
+        silver: `
+/*  镀银感特效 */
+${contentSelector} {
+    background: linear-gradient(145deg, #f0f0f0 0%, #ffffff 50%, #e0e0e0 100%) !important;
+    box-shadow: 
+        0 4px 15px rgba(0,0,0,0.15),
+        inset 0 1px 0 rgba(255,255,255,0.9),
+        inset 0 -1px 0 rgba(0,0,0,0.1) !important;
+    border: 1px solid #c0c0c0 !important;
+}
+${contentSelector}::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important; left: 0 !important; right: 0 !important;
+    height: 40% !important;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 100%) !important;
+    pointer-events: none !important;
+    z-index: 5 !important;
+}
+`,
+        emboss: `
+/*  浮雕感特效 */
+${contentSelector} {
+    background: linear-gradient(145deg, #e8e8e8, #d0d0d0) !important;
+    box-shadow: 
+        6px 6px 12px #b8b8b8,
+        -6px -6px 12px #ffffff,
+        inset 1px 1px 2px rgba(255,255,255,0.5),
+        inset -1px -1px 2px rgba(0,0,0,0.1) !important;
+    border: none !important;
+}
+`,
+        glass: `
+/*  毛玻璃特效 */
+${contentSelector} {
+    background: rgba(255, 255, 255, 0.25) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
+`,
+        neon: `
+/*  霓虹边框特效 */
+${contentSelector} {
+    border: 2px solid #00f3ff !important;
+    box-shadow: 
+        0 0 8px #00f3ff,
+        0 0 16px #00f3ff,
+        0 0 32px #00f3ff,
+        0 0 64px #00f3ff,
+        inset 0 0 16px rgba(0,243,255,0.1) !important;
+    animation: neonPulse 2s ease-in-out infinite alternate !important;
+}
+@keyframes neonPulse {
+    from { box-shadow: 0 0 8px #00f3ff, 0 0 16px #00f3ff, 0 0 32px #00f3ff; }
+    to { box-shadow: 0 0 12px #00f3ff, 0 0 24px #00f3ff, 0 0 48px #00f3ff, 0 0 72px #00f3ff; }
+}
+`,
+        'neon-pink': `
+/*  粉色霓虹特效 */
+${contentSelector} {
+    border: 2px solid #ff6b9d !important;
+    box-shadow: 
+        0 0 8px #ff6b9d,
+        0 0 16px #ff6b9d,
+        0 0 32px #ff6b9d,
+        0 0 64px #ff6b9d,
+        inset 0 0 16px rgba(255,107,157,0.1) !important;
+    animation: neonPinkPulse 2s ease-in-out infinite alternate !important;
+}
+@keyframes neonPinkPulse {
+    from { box-shadow: 0 0 8px #ff6b9d, 0 0 16px #ff6b9d, 0 0 32px #ff6b9d; }
+    to { box-shadow: 0 0 12px #ff6b9d, 0 0 24px #ff6b9d, 0 0 48px #ff6b9d, 0 0 72px #ff6b9d; }
+}
+`,
+        vintage: `
+/*  复古纸张特效 */
+${contentSelector} {
+    background: linear-gradient(135deg, #f7f1e3 0%, #e8dcc4 50%, #f7f1e3 100%) !important;
+    box-shadow: 
+        0 2px 12px rgba(0,0,0,0.12),
+        inset 0 0 60px rgba(139,119,101,0.08) !important;
+    border: 1px solid #d4c5b0 !important;
+}
+${contentSelector}::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noise)' opacity='0.06'/%3E%3C/svg%3E") !important;
+    pointer-events: none !important;
+    z-index: 1 !important;
+    border-radius: inherit !important;
+}
+`,
+        'gradient-border': `
+/*  渐变边框特效 */
+${contentSelector} {
+    border: 3px solid transparent !important;
+    background: linear-gradient(white, white) padding-box,
+                linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) border-box !important;
+    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.25) !important;
+}
+`,
+        'inner-shadow': `
+/*  内凹阴影特效 */
+${contentSelector} {
+    box-shadow: 
+        inset 0 6px 12px rgba(0,0,0,0.15),
+        inset 0 -3px 6px rgba(255,255,255,0.1),
+        0 2px 6px rgba(0,0,0,0.1) !important;
+    border: 1px solid rgba(0,0,0,0.1) !important;
+}
+`,
+        candy: `
+/*  糖果色特效 */
+${contentSelector} {
+    background: linear-gradient(135deg, #fff5f5 0%, #fff0f5 30%, #ffe4e1 70%, #ffd1dc 100%) !important;
+    box-shadow: 
+        0 6px 20px rgba(255,182,193,0.3),
+        inset 0 2px 8px rgba(255,255,255,0.9),
+        inset 0 -2px 4px rgba(255,105,180,0.1) !important;
+    border: 2px solid #ffb6c1 !important;
+}
+`,
+        wood: `
+/*  木纹质感特效 */
+${contentSelector} {
+    background: linear-gradient(90deg, 
+        #d4a574 0%, #c9956a 10%, #deb887 20%, 
+        #d4a574 30%, #c9956a 40%, #deb887 50%,
+        #d4a574 60%, #c9956a 70%, #deb887 80%,
+        #d4a574 90%, #c9956a 100%) !important;
+    box-shadow: 
+        0 4px 12px rgba(0,0,0,0.2),
+        inset 0 1px 0 rgba(255,255,255,0.3),
+        inset 0 -1px 0 rgba(0,0,0,0.1) !important;
+    border: 1px solid #a0785a !important;
+}
+`
+    };
+    
+    return effects[effectType] || '';
+}
+function render() {
+    const styleTag = document.getElementById('generated-css');
+    document.querySelector('#preview-user .preview-text').innerText = userConfig.textContent;
+    document.querySelector('#preview-ai .preview-text').innerText = aiConfig.textContent;
+    updateAvatar('user');
+    updateAvatar('ai');
+    const css = generatePreviewCSS();
+    styleTag.innerHTML = css;
+    
+    // 【新增】让卡片居中显示
+    const wrapper = document.querySelector('.scroll-wrapper');
+    const cardWidth = commonConfig.cardWidth;
+    const wrapperWidth = wrapper.clientWidth;
+    
+    if (cardWidth > wrapperWidth) {
+        // 卡片比容器宽，滚动到中间
+        wrapper.scrollLeft = (cardWidth - wrapperWidth) / 2 + 60; // 60是padding
+    } else {
+        wrapper.scrollLeft = 0;
+    }
+}
+
+function updateAvatar(role) {
+    const config = role === 'user' ? userConfig : aiConfig;
+    const img = document.querySelector(`#avatar-${role} img`);
+    if (config.avatarUrl) {
+        img.src = config.avatarUrl;
+        img.style.display = 'block';
+    } else {
+        img.style.display = 'none';
+    }
+}
+
+function generatePreviewCSS() {
+    let css = '';
+    
+    // 通用字体
+    if (commonConfig.customFontUrl) {
+        css += `@font-face { font-family: 'CustomFont'; src: url('${commonConfig.customFontUrl}'); font-display: swap; }\n`;
+    }
+    
+    // User 字体
+    if (userConfig.customFontUrl) {
+        css += `@font-face { font-family: 'CustomFont-user'; src: url('${userConfig.customFontUrl}'); font-display: swap; }\n`;
+    }
+    // User 装饰字体
+    if (userConfig.decoA_FontUrl) {
+        css += `@font-face { font-family: 'Deco-user-A'; src: url('${userConfig.decoA_FontUrl}'); font-display: swap; }\n`;
+    }
+    if (userConfig.decoB_FontUrl) {
+        css += `@font-face { font-family: 'Deco-user-B'; src: url('${userConfig.decoB_FontUrl}'); font-display: swap; }\n`;
+    }
+    if (userConfig.decoC_FontUrl) {
+        css += `@font-face { font-family: 'Deco-user-C'; src: url('${userConfig.decoC_FontUrl}'); font-display: swap; }\n`;
+    }
+    // 在 generatePreviewCSS 中添加
+// User 计数器字体
+if (userConfig.counterFontUrl) {
+    css += `@font-face { font-family: 'CounterFont-user'; src: url('${userConfig.counterFontUrl}'); font-display: swap; }\n`;
+}
+// AI 计数器字体
+if (aiConfig.counterFontUrl) {
+    css += `@font-face { font-family: 'CounterFont-ai'; src: url('${aiConfig.counterFontUrl}'); font-display: swap; }\n`;
+}
+    // AI 字体
+    if (aiConfig.customFontUrl) {
+        css += `@font-face { font-family: 'CustomFont-ai'; src: url('${aiConfig.customFontUrl}'); font-display: swap; }\n`;
+    }
+    // AI 装饰字体
+    if (aiConfig.decoA_FontUrl) {
+        css += `@font-face { font-family: 'Deco-ai-A'; src: url('${aiConfig.decoA_FontUrl}'); font-display: swap; }\n`;
+    }
+    if (aiConfig.decoB_FontUrl) {
+        css += `@font-face { font-family: 'Deco-ai-B'; src: url('${aiConfig.decoB_FontUrl}'); font-display: swap; }\n`;
+    }
+    if (aiConfig.decoC_FontUrl) {
+        css += `@font-face { font-family: 'Deco-ai-C'; src: url('${aiConfig.decoC_FontUrl}'); font-display: swap; }\n`;
+    }
+    
+    css += generateRoleCSS('user', userConfig, '#preview-user');
+    css += generateRoleCSS('ai', aiConfig, '#preview-ai');
+    
+    return css;
+}
+
+function generateExportCSS(roleFilter = null) {
+    const c = commonConfig;
+    
+    let css = `/* Generated by qaq Offline Bubble Editor */\n`;
+    // 在 generateExportCSS 中添加
+if (!roleFilter || roleFilter === 'user') {
+    if (userConfig.counterFontUrl) {
+        css += `@font-face { font-family: 'CounterFont-user'; src: url('${userConfig.counterFontUrl}'); font-display: swap; }\n`;
+    }
+}
+if (!roleFilter || roleFilter === 'ai') {
+    if (aiConfig.counterFontUrl) {
+        css += `@font-face { font-family: 'CounterFont-ai'; src: url('${aiConfig.counterFontUrl}'); font-display: swap; }\n`;
+    }
+}
+    // 通用字体
+    if (c.customFontUrl) {
+        css += `@font-face { font-family: 'CustomFont'; src: url('${c.customFontUrl}'); font-display: swap; }\n`;
+    }
+    
+    // User 相关字体
+    if (!roleFilter || roleFilter === 'user') {
+        if (userConfig.customFontUrl) {
+            css += `@font-face { font-family: 'CustomFont-user'; src: url('${userConfig.customFontUrl}'); font-display: swap; }\n`;
+        }
+        if (userConfig.decoA_FontUrl) {
+            css += `@font-face { font-family: 'Deco-user-A'; src: url('${userConfig.decoA_FontUrl}'); font-display: swap; }\n`;
+        }
+        if (userConfig.decoB_FontUrl) {
+            css += `@font-face { font-family: 'Deco-user-B'; src: url('${userConfig.decoB_FontUrl}'); font-display: swap; }\n`;
+        }
+        if (userConfig.decoC_FontUrl) {
+            css += `@font-face { font-family: 'Deco-user-C'; src: url('${userConfig.decoC_FontUrl}'); font-display: swap; }\n`;
+        }
+    }
+    
+    // AI 相关字体
+    if (!roleFilter || roleFilter === 'ai') {
+        if (aiConfig.customFontUrl) {
+            css += `@font-face { font-family: 'CustomFont-ai'; src: url('${aiConfig.customFontUrl}'); font-display: swap; }\n`;
+        }
+        if (aiConfig.decoA_FontUrl) {
+            css += `@font-face { font-family: 'Deco-ai-A'; src: url('${aiConfig.decoA_FontUrl}'); font-display: swap; }\n`;
+        }
+        if (aiConfig.decoB_FontUrl) {
+            css += `@font-face { font-family: 'Deco-ai-B'; src: url('${aiConfig.decoB_FontUrl}'); font-display: swap; }\n`;
+        }
+        if (aiConfig.decoC_FontUrl) {
+            css += `@font-face { font-family: 'Deco-ai-C'; src: url('${aiConfig.decoC_FontUrl}'); font-display: swap; }\n`;
+        }
+    }
+    css += `
+#offline-mode-overlay .offline-message {
+    display: flex !important;
+    flex-direction: ${c.flexDirection} !important;
+    align-items: ${c.alignItems} !important;
+    justify-content: ${c.justifyContent} !important;
+    margin-bottom: ${c.marginBottom}px !important;
+    position: relative !important;
+    width: 100% !important;
+    overflow: ${c.cardOverflow ? 'hidden' : 'visible'} !important;
+}
+`;
+
+    if (!roleFilter || roleFilter === 'user') css += generateRoleCSS('user', userConfig, '#offline-mode-overlay .offline-message.user', true);
+    if (!roleFilter || roleFilter === 'ai') css += generateRoleCSS('ai', aiConfig, '#offline-mode-overlay .offline-message.ai', true);
+    return css;
+}
+
+// ==================== 解析功能 (修复版) ====================
+function parseCSS() {
+    const inputEl = document.getElementById('cssInput');
+    const savedCode = inputEl ? inputEl.value : ''; 
+    const logEl = document.getElementById('parseLog');
+    
+    if (!savedCode) return alert('请先粘贴 CSS！');
+    
+    resetConfigs();
+
+    logEl.style.display = 'block';
+    let logs = ['<div style="color:#4ade80;">🔍 开始解析...</div>'];
+    let foundCount = 0;
+    
+    // 预处理：保留换行以便于正则匹配块
+    const cleanCss = savedCode.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+
+    // 1. 解析字体 (保持不变)
+    const fontFaceBlock = findBlockLoose('@font-face', cleanCss);
+    if (fontFaceBlock) {
+        const src = getProp(fontFaceBlock, 'src');
+        if (src) {
+            const urlMatch = src.match(/url$['"]?([^'"]+)['"]?$/);
+            if (urlMatch) commonConfig.customFontUrl = urlMatch[1];
+        }
+    }
+
+    // 2. 解析通用样式
+    logs.push('<div style="color:#aaa;">Trying generic styles...</div>');
+    const genericCount = parseRoleFromCSS('generic', userConfig, cleanCss, logs);
+    if (genericCount > 0) {
+        Object.keys(userConfig).forEach(key => {
+            if (key !== 'textContent') aiConfig[key] = userConfig[key];
+        });
+        foundCount += genericCount * 2;
+        logs.push(`<div><span class="log-info">i</span> 应用通用样式到双角色</div>`);
+    }
+    
+    // 3. 解析 User & AI
+    foundCount += parseRoleFromCSS('user', userConfig, cleanCss, logs);
+    foundCount += parseRoleFromCSS('ai', aiConfig, cleanCss, logs);
+    
+    logs.push(`<div><span class="log-info">✅</span> 解析完成，更新 ${foundCount} 项属性</div>`);
+    logEl.innerHTML = logs.join('');
+    
+    renderTabs();
+    render();
+    
+    if (inputEl) inputEl.value = savedCode;
+}
+
+// ==================== 3. 终极解析逻辑 (修复版：精准定位与圆角) ====================
+function parseRoleFromCSS(role, config, css, logs) {
+    let count = 0;
+    const isUser = role === 'user';
+    const isGeneric = role === 'generic';
+    
+    // 1. 定义选择器
+    const selectors = {
+        msg: isGeneric ? ['#offline-mode-overlay .offline-message ', '.offline-message '] : (isUser ? ['.offline-message.user', '#preview-user'] : ['.offline-message.ai', '#preview-ai']),
+        content: isGeneric ? ['#offline-mode-overlay .offline-message-content', '.offline-message-content'] : (isUser ? ['.offline-message.user .offline-message-content', '#content-user'] : ['.offline-message.ai .offline-message-content', '#content-ai']),
+        avatar: isGeneric ? ['#offline-mode-overlay .offline-avatar', '.offline-avatar'] : (isUser ? ['.offline-message.user .offline-avatar', '#avatar-user'] : ['.offline-message.ai .offline-avatar', '#avatar-ai']),
+        
+        // 装饰伪元素
+        poster: isGeneric ? ['#offline-mode-overlay .offline-message-content::before', '.offline-message-content::before'] : (isUser ? ['.offline-message.user .offline-message-content::before'] : ['.offline-message.ai .offline-message-content::before']),
+        footer: isGeneric ? ['#offline-mode-overlay .offline-message-content::after', '.offline-message-content::after'] : (isUser ? ['.offline-message.user .offline-message-content::after'] : ['.offline-message.ai .offline-message-content::after']),
+        msgAfter: isGeneric ? ['#offline-mode-overlay .offline-message::after', '.offline-message::after'] : (isUser ? ['.offline-message.user::after'] : ['.offline-message.ai::after']),
+        
+        // 头像伪元素
+        avatarAfter: isGeneric ? ['#offline-mode-overlay .offline-avatar::after', '.offline-avatar::after'] : (isUser ? ['.offline-message.user .offline-avatar::after'] : ['.offline-message.ai .offline-avatar::after']),
+        avatarBefore: isGeneric ? ['#offline-mode-overlay .offline-avatar::before', '.offline-avatar::before'] : (isUser ? ['.offline-message.user .offline-avatar::before'] : ['.offline-message.ai .offline-avatar::before']),
+    };
+
+    // 辅助查找函数
+    const findAny = (keys) => {
+        for (let sel of keys) {
+            const block = isGeneric ? findBlockExact(sel, css) : findBlock(sel, css);
+            if (block) return block;
+        }
+        return null;
+    };
+    
+    const findAll = (keys) => {
+        let all = [];
+        for (let sel of keys) all = all.concat(findAllBlocks(sel, css));
+        return all;
+    };
+
+    // --- A. 容器基础 ---
+    const msgBlock = findAny(selectors.msg);
+    if (msgBlock) {
+        if (!isGeneric) logs.push(`<div style="color:${isUser ? '#e74c3c' : '#3498db'};">📦 解析 ${role.toUpperCase()}...</div>`);
+        
+        const border = getProp(msgBlock, 'border');
+        if (border) {
+            config.cardBorderWidth = extractNum(border);
+            const colorMatch = border.match(/#[a-fA-F0-9]{6}|rgba?$[^)]+$/);
+            if (colorMatch) config.cardBorderColor = rgbaToHexParse(colorMatch[0])?.hex || colorMatch[0];
+            count++;
+        }
+        
+        const bgColor = getProp(msgBlock, 'background-color') || getProp(msgBlock, 'background');
+        if (bgColor && !bgColor.includes('url') && !bgColor.includes('gradient')) {
+            const hex = rgbaToHexParse(bgColor);
+            if (hex) { config.cardBgColor = hex.hex; config.useGradient = false; }
+        }
+    }
+
+    // --- B. 内容区域 (关键：圆角与复杂背景) ---
+    const contentBlock = findAny(selectors.content);
+    if (contentBlock) {
+        // 1. 提取内边距
+        const padding = getProp(contentBlock, 'padding');
+        if (padding) {
+            const parts = padding.split(/\s+/);
+            if (parts.length >= 1) config.contentPaddingTop = extractNum(parts[0]);
+            if (parts.length >= 2) config.contentPadding = extractNum(parts[1]);
+            if (parts.length >= 3) config.contentPaddingBottom = extractNum(parts[2]);
+            else if (parts.length === 2) config.contentPaddingBottom = extractNum(parts[0]);
+            else config.contentPaddingBottom = extractNum(parts[0]);
+            count++;
+        }
+
+        // 2. 提取文字颜色
+        const color = getProp(contentBlock, 'color');
+        if (color) {
+            const hex = rgbaToHexParse(color);
+            if (hex) config.textColor = hex.hex;
+        }
+
+        // 3. 【修复圆角】强制将 border-radius 应用到 CustomCSS
+        const radius = getProp(contentBlock, 'border-radius');
+        if (radius) {
+            // 同时应用给 %MESSAGE% (防止裁剪) 和 %CONTENT%
+            config.customCss += `\n/* 修复圆角 */\n%MESSAGE%, %CONTENT% { border-radius: ${radius} !important; overflow: visible !important; }`;
+            // 顺便更新一下UI上的滑块，虽然主要靠上面的CSS生效
+            commonConfig.cardRadius = extractNum(radius);
+            count++;
+        }
+
+        // 4. 提取复杂背景和特效
+        const bg = getProp(contentBlock, 'background');
+        const bgImg = getProp(contentBlock, 'background-image');
+        
+        if ((bg && (bg.includes('gradient') || bg.includes('url'))) || (bgImg)) {
+            let extractedStyles = '';
+            ['background', 'background-image', 'background-size', 'background-position', 'background-repeat', 'box-shadow', 'backdrop-filter', '-webkit-backdrop-filter', 'border'].forEach(prop => {
+                const val = getProp(contentBlock, prop);
+                if (val) extractedStyles += `${prop}: ${val} !important;\n`;
+            });
+            
+            if (extractedStyles) {
+                config.customCss += `\n/* 气泡本体复杂样式 */\n%CONTENT% {\n${extractedStyles}}`;
+                logs.push(`<div><span class="log-info">🎨</span> 提取复杂气泡背景/纹理</div>`);
+                count++;
+            }
+        }
+    }
+
+    // --- C. 装饰提取 ---
+    findAll(selectors.poster).forEach(block => {
+        const anim = getProp(block, 'animation');
+        const bgImg = getProp(block, 'background-image');
+        
+        if (anim || (bgImg && !bgImg.includes(config.posterImg || '###'))) {
+            const inner = block.replace(/^[^{]+{/, '').replace(/}$/, '');
+            config.customCss += `\n/* 气泡前置装饰(光晕) */\n%CONTENT%::before { ${inner} }`;
+            logs.push(`<div><span class="log-info">✨</span> 提取 Content::before</div>`);
+            count++;
+        } else if (bgImg && bgImg.includes('url')) {
+            const urlMatch = bgImg.match(/url$['"]?([^'"]+)['"]?$/i);
+            if (urlMatch) { config.posterEnable = true; config.posterImg = urlMatch[1]; }
+        }
+    });
+
+    findAll(selectors.footer).forEach(block => {
+        const bgImg = getProp(block, 'background-image');
+        const content = getProp(block, 'content');
+        
+        if (bgImg && bgImg.includes('url')) {
+            const inner = block.replace(/^[^{]+{/, '').replace(/}$/, '');
+            config.customCss += `\n/* 气泡后置装饰(蕾丝) */\n%CONTENT%::after { ${inner} }`;
+            logs.push(`<div><span class="log-info">🎀</span> 提取 Content::after</div>`);
+            count++;
+        } else if (content && !content.includes('url') && content.length > 2) {
+            config.footerEnable = true;
+            config.footerText = content.replace(/^['"]|['"]$/g, '');
+            const color = getProp(block, 'color');
+            if (color) config.footerColor = rgbaToHexParse(color)?.hex || color;
+        }
+    });
+
+    findAll(selectors.msgAfter).forEach(block => {
+        const content = getProp(block, 'content');
+        if (content && content.length > 2) {
+            const inner = block.replace(/^[^{]+{/, '').replace(/}$/, '');
+            config.customCss += `\n/* 容器底部装饰 */\n%MESSAGE%::after { ${inner} }`;
+            logs.push(`<div><span class="log-info">✒️</span> 提取底部文字装饰</div>`);
+            count++;
+        }
+    });
+
+    findAll(selectors.avatarAfter).forEach(block => {
+        const inner = block.replace(/^[^{]+{/, '').replace(/}$/, '');
+        config.customCss += `\n/* 头像后置(框) */\n%AVATAR%::after { ${inner} }`;
+        count++;
+    });
+    findAll(selectors.avatarBefore).forEach(block => {
+        const inner = block.replace(/^[^{]+{/, '').replace(/}$/, '');
+        config.customCss += `\n/* 头像前置(颜文字) */\n%AVATAR%::before { ${inner} }`;
+        count++;
+    });
+    
+    // --- D. 头像位置与样式 (修复错位) ---
+    const avatarBlock = findAny(selectors.avatar);
+    if (avatarBlock) {
+        const size = getProp(avatarBlock, 'width');
+        if (size) config.avatarSize = extractNum(size);
+        
+        // 【修复】检测到 absolute 定位时，不再尝试转换成滑块，而是直接提取定位 CSS
+        if (avatarBlock.includes('absolute')) {
+            config.avatarAbsolute = true;
+            
+            // 提取所有定位相关属性，直接写入 Custom CSS
+            let posStyles = '';
+            ['top', 'left', 'right', 'bottom', 'transform', 'margin', 'z-index'].forEach(p => {
+                const v = getProp(avatarBlock, p);
+                if(v) posStyles += `${p}: ${v} !important; `;
+            });
+            
+            if (posStyles) {
+                config.customCss += `\n/* 头像精准定位 */\n%AVATAR% { position: absolute !important; ${posStyles} }`;
+                logs.push(`<div><span class="log-info">📍</span> 提取头像精准定位</div>`);
+            }
+        }
+        
+        // 提取头像本体样式
+        let avatarStyles = '';
+        ['box-shadow', 'border', 'background-color', 'backdrop-filter', 'border-radius'].forEach(p => {
+            const v = getProp(avatarBlock, p);
+            if(v) avatarStyles += `${p}: ${v} !important;\n`;
+        });
+        if(avatarStyles) config.customCss += `\n/* 头像本体样式 */\n%AVATAR% { ${avatarStyles} }`;
+    }
+
+    // --- E. 子标签提取 ---
+    const textSelectorPrefix = isGeneric ? '#offline-mode-overlay .offline-message-text' : (isUser ? '.offline-message.user .offline-message-text' : '.offline-message.ai .offline-message-text');
+    
+    ['em', 'i', 'strong', 'b'].forEach(tag => {
+        const subBlocks = findAllBlocks(`${textSelectorPrefix} ${tag}`, css);
+        subBlocks.forEach(block => {
+            const inner = block.replace(/^[^{]+{/, '').replace(/}$/, '');
+            config.customCss += `\n/* 文字子标签 ${tag} */\n${role === 'user' ? '#preview-user' : (role === 'ai' ? '#preview-ai' : '.offline-message')} .preview-text ${tag}, ${role === 'user' ? '#preview-user' : (role === 'ai' ? '#preview-ai' : '.offline-message')} .offline-message-text ${tag} { ${inner} }`;
+        });
+        
+        ['::before', '::after'].forEach(pseudo => {
+            const pseudoBlocks = findAllBlocks(`${textSelectorPrefix} ${tag}${pseudo}`, css);
+            pseudoBlocks.forEach(block => {
+                 const inner = block.replace(/^[^{]+{/, '').replace(/}$/, '');
+                 config.customCss += `\n/* 文字子标签伪元素 ${tag}${pseudo} */\n${role === 'user' ? '#preview-user' : (role === 'ai' ? '#preview-ai' : '.offline-message')} .preview-text ${tag}${pseudo}, ${role === 'user' ? '#preview-user' : (role === 'ai' ? '#preview-ai' : '.offline-message')} .offline-message-text ${tag}${pseudo} { ${inner} }`;
+            });
+        });
+    });
+
+    return count;
+}
+// 宽松查找
+function findBlockLoose(selectorFragment, cleanCss) {
+    if (!selectorFragment || !cleanCss) return null;
+    const escaped = selectorFragment.replace(/[+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`[^}]*${escaped}\\s*\\{`, 'i');
+    const match = cleanCss.match(regex);
+    if (!match) return null;
+    const start = match.index + match[0].length;
+    let depth = 1, end = -1;
+    for (let i = start; i < cleanCss.length; i++) {
+        if (cleanCss[i] === '{') depth++;
+        else if (cleanCss[i] === '}') depth--;
+        if (depth === 0) { end = i; break; }
+    }
+    return end !== -1 ? cleanCss.substring(start, end) : null;
+}
+
+// 精确查找
+function findBlockExact(selector, css) {
+    if (!selector || !css) return null;
+    const cleanCss = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(?:^|[\\}])\\s*${escaped}\\s*\\{`, 'i');
+    const match = cleanCss.match(regex);
+    if (!match) return null;
+    const braceIndex = cleanCss.indexOf('{', match.index);
+    const start = braceIndex + 1;
+    let depth = 1, end = -1;
+    for (let i = start; i < cleanCss.length; i++) {
+        if (cleanCss[i] === '{') depth++;
+        else if (cleanCss[i] === '}') depth--;
+        if (depth === 0) { end = i; break; }
+    }
+    return end !== -1 ? cleanCss.substring(start, end) : null;
+}
+
+// 查找所有
+function findAllBlocks(selector, css) {
+    if (!selector || !css) return [];
+    const cleanCss = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(?:^|[\\}])\\s*${escaped}\\s*\\{`, 'gi');
+    let matches = [];
+    let match;
+    while ((match = regex.exec(cleanCss)) !== null) {
+        const braceIndex = cleanCss.indexOf('{', match.index);
+        const start = braceIndex + 1;
+        let depth = 1, end = -1;
+        for (let i = start; i < cleanCss.length; i++) {
+            if (cleanCss[i] === '{') depth++;
+            else if (cleanCss[i] === '}') depth--;
+            if (depth === 0) { end = i; break; }
+        }
+        if (end !== -1) matches.push(cleanCss.substring(start, end));
+    }
+    return matches;
+}
+
+function findBlock(selector, css) {
+    return findBlockLoose(selector, css);
+}
+
+function getProp(block, prop) {
+    if (!block) return null;
+    const safe = prop.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`${safe}\\s*:\\s*([^;\\}]+)`, 'i');
+    const match = block.match(regex);
+    return match ? match[1].trim().replace(/!important/gi, '').trim() : null;
+}
+
+function extractNum(str) {
+    if (!str) return 0;
+    const match = str.match(/(-?[\d.]+)/);
+    return match ? parseFloat(match[0]) : 0;
+}
+
+function rgbaToHexParse(rgba) {
+    if (!rgba) return null;
+    if (rgba.startsWith('#')) {
+        let hex = rgba;
+        if (hex.length === 4) hex = '#' + hex[1]+hex[1] + hex[2]+hex[2] + hex[3]+hex[3];
+        return { hex: hex, alpha: 1 };
+    }
+    const values = rgba.match(/[\d.]+/g);
+    if (!values || values.length < 3) return null;
+    const toHex = n => {
+    n = Math.max(0, Math.min(255, parseInt(n)));
+    return n.toString(16).padStart(2, '0');
+};
+    return {
+        hex: '#' + toHex(values[0]) + toHex(values[1]) + toHex(values[2]),
+        alpha: values.length > 3 ? parseFloat(values[3]) : 1
+    };
+}
+
+function resetConfigs() {
+    Object.assign(userConfig, JSON.parse(JSON.stringify(roleDefaults)));
+    Object.assign(aiConfig, JSON.parse(JSON.stringify(roleDefaults)));
+    userConfig.textContent = '用户消息示例...';
+    aiConfig.textContent = 'AI 回复示例...';
+    commonConfig.customFontUrl = '';
+}
+
+function switchBg(type) {
+    const container = document.getElementById('previewContainer');
+    container.className = 'preview-container bg-' + type;
+    document.querySelectorAll('.bg-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`.bg-btn[data-bg="${type}"]`).classList.add('active');
+}
+
+function handleUpload(input, targetId) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById(targetId).value = e.target.result;
+        const config = currentRole === 'user' ? userConfig : aiConfig;
+        config[targetId] = e.target.result;
+        render();
+    };
+    reader.readAsDataURL(file);
+}
+
+// 保留旧函数兼容，内部调用新函数
+function copyCSS(roleFilter = null) {
+    generateCode(roleFilter);
+    exportToClipboard();
+}
+
+function showToast(msg) {
+    const toast = document.getElementById('copyToast');
+    toast.innerText = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ==================== 智能调色板逻辑 ====================
+function generatePalette(inputId) {
+    const inputEl = document.getElementById(inputId);
+    const paletteEl = document.getElementById(inputId + '_palette');
+    if (!inputEl || !paletteEl) return;
+
+    const cssText = inputEl.value;
+    // 正则匹配 Hex颜色 和 RGBA颜色
+    // 匹配: #ffffff, #fff, rgba(0,0,0,0.5), rgb(0,0,0)
+    const colorRegex = /(?:#([a-f\d]{3,8}))|(?:rgba?$([^)]+)$)/gi;
+    
+    let match;
+    let colors = [];
+    let index = 0;
+
+    paletteEl.innerHTML = ''; // 清空旧的
+
+    while ((match = colorRegex.exec(cssText)) !== null) {
+        const fullMatch = match[0];
+        let hexVal = '#000000';
+        let isRgba = false;
+
+        if (fullMatch.startsWith('#')) {
+            // Hex 处理
+            hexVal = fullMatch.substring(0, 7); // 忽略 Hex8 的 alpha
+            if (hexVal.length === 4) { // #fff -> #ffffff
+                hexVal = '#' + hexVal[1]+hexVal[1] + hexVal[2]+hexVal[2] + hexVal[3]+hexVal[3];
+            }
+        } else {
+            // RGBA 处理
+            isRgba = true;
+            const nums = match[2].split(',').map(n => parseFloat(n.trim()));
+            if (nums.length >= 3) {
+                const toHex = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+                hexVal = '#' + toHex(nums[0]) + toHex(nums[1]) + toHex(nums[2]);
+            }
+        }
+
+        // 创建色块 DOM
+        const item = document.createElement('div');
+        item.className = 'palette-item';
+        // 背景显示实际颜色（含透明度）
+        item.innerHTML = `
+    <div class="palette-bg" style="background-color: ${fullMatch}"></div>
+    <input type="color" value="${hexVal}" data-index="${index}" data-original="${fullMatch}">
+`;
+        
+        // 绑定事件
+        const colorInput = item.querySelector('input');
+        colorInput.oninput = (e) => {
+            const newHex = e.target.value;
+            updateColorInCss(inputId, e.target.dataset.index, newHex, e.target.dataset.original);
+            // 更新预览色块背景
+            item.querySelector('.palette-bg').style.backgroundColor = newHex; 
+        };
+
+        paletteEl.appendChild(item);
+        index++;
+    }
+}
+
+function updateColorInCss(inputId, colorIndex, newHex, originalColor) {
+    const inputEl = document.getElementById(inputId);
+    let cssText = inputEl.value;
+    
+    // 重新运行正则找到第 N 个颜色
+    const colorRegex = /(?:#([a-f\d]{3,8}))|(?:rgba?$([^)]+)$)/gi;
+    let match;
+    let currentIndex = 0;
+    let targetIndex = parseInt(colorIndex);
+    
+    // 我们需要构建新的字符串
+    let newCss = cssText;
+    
+    // 简单的替换策略：为了防止替换错相同的颜色字符串，我们必须按位置替换
+    // 这里使用回调函数方式重建字符串比较安全
+    newCss = cssText.replace(colorRegex, (match) => {
+        if (currentIndex === targetIndex) {
+            currentIndex++;
+            
+            // 智能转换：如果原来是 RGBA，保持 Alpha 不变，只改 RGB
+            if (match.startsWith('rgb')) {
+                const rgbaMatch = match.match(/rgba?$([^)]+)$/);
+                if (rgbaMatch) {
+                    const parts = rgbaMatch[1].split(',');
+                    const alpha = parts.length > 3 ? parts.slice(3).join(',') : '1'; // 获取原 Alpha
+                    
+                    // Hex 转 RGB
+                    const r = parseInt(newHex.slice(1, 3), 16);
+                    const g = parseInt(newHex.slice(3, 5), 16);
+                    const b = parseInt(newHex.slice(5, 7), 16);
+                    
+                    return `rgba(${r}, ${g}, ${b}, ${alpha.trim()})`;
+                }
+            }
+            // 如果原来是 Hex，直接替换
+            return newHex;
+        }
+        currentIndex++;
+        return match; // 不是目标索引，保持原样
+    });
+
+    // 更新输入框和配置
+    inputEl.value = newCss;
+    const config = currentRole === 'user' ? userConfig : aiConfig; // 注意：这里简化了，实际要判断当前角色
+    // 更严谨的配置更新：
+    if (currentRole === 'common') commonConfig[inputId] = newCss;
+    else if (currentRole === 'user') userConfig[inputId] = newCss;
+    else aiConfig[inputId] = newCss;
+
+    render(); // 刷新预览
+}
+// 渐变颜色存储
+const gradientColors = {};
+
+function addGradientColor(inputId) {
+    if (!gradientColors[inputId]) gradientColors[inputId] = [];
+    gradientColors[inputId].push('#ffffff');
+    renderGradientPalette(inputId);
+}
+
+function renderGradientPalette(inputId) {
+    const paletteEl = document.getElementById(inputId + '_palette');
+    if (!paletteEl) return;
+    
+    const colors = gradientColors[inputId] || [];
+    paletteEl.innerHTML = colors.map((c, i) => `
+        <div class="palette-item">
+            <div class="palette-bg" style="background:${c}"></div>
+            <input type="color" value="${c}" onchange="updateGradientColor('${inputId}',${i},this.value)">
+            <span onclick="removeGradientColor('${inputId}',${i})" style="position:absolute;top:-5px;right:-5px;font-size:10px;cursor:pointer;">✕</span>
+        </div>
+    `).join('');
+}
+
+function updateGradientColor(inputId, index, color) {
+    gradientColors[inputId][index] = color;
+    renderGradientPalette(inputId);
+}
+
+function removeGradientColor(inputId, index) {
+    gradientColors[inputId].splice(index, 1);
+    renderGradientPalette(inputId);
+}
+
+function generateGradient(inputId) {
+    const colors = gradientColors[inputId] || [];
+    if (colors.length < 2) return alert('至少需要2个颜色');
+    
+    const stops = colors.map((c, i) => `${c} ${Math.round(i / (colors.length - 1) * 100)}%`).join(', ');
+    const gradient = `linear-gradient(180deg, ${stops})`;
+    
+    document.getElementById(inputId).value = gradient;
+    const config = currentRole === 'user' ? userConfig : aiConfig;
+    config[inputId] = gradient;
+    render();
+}
+function addDecoLayer() {
+    const config = currentRole === 'user' ? userConfig : aiConfig;
+    if (!config.decoLayers) config.decoLayers = [];
+    config.decoLayers.push({ url: '', x: 50, y: 50, size: 100 });
+    renderDecoLayers();
+    render();
+}
+
+function removeDecoLayer(index) {
+    const config = currentRole === 'user' ? userConfig : aiConfig;
+    config.decoLayers.splice(index, 1);
+    renderDecoLayers();
+    render();
+}
+
+function updateDecoLayer(index, key, value) {
+    const config = currentRole === 'user' ? userConfig : aiConfig;
+    config.decoLayers[index][key] = key === 'url' ? value : parseFloat(value);
+    render();
+}
+
+function renderDecoLayers() {
+    const config = currentRole === 'user' ? userConfig : aiConfig;
+    const list = document.getElementById('decoLayerList');
+    if (!list || !config.decoLayers) return;
+    
+    list.innerHTML = config.decoLayers.map((layer, i) => `
+        <div style="background:#f5f5f5;padding:8px;margin-bottom:6px;border-radius:4px;position:relative;">
+            <button class="btn-sm" onclick="removeDecoLayer(${i})" style="position:absolute;top:4px;right:4px;background:#ff4444;color:#fff;">✕</button>
+            <div class="form-row">
+                <span class="form-label">图片</span>
+                <input type="text" value="${layer.url}" placeholder="URL" onchange="updateDecoLayer(${i},'url',this.value)" style="flex:1;">
+                <label class="btn-sm" style="cursor:pointer;">📂<input type="file" accept="image/*" style="display:none" onchange="handleLayerUpload(this,${i})"></label>
+            </div>
+            <div class="form-row">
+                <span class="form-label">X位置%</span>
+                <input type="range" min="0" max="100" value="${layer.x}" oninput="updateDecoLayer(${i},'x',this.value)">
+                <input type="number" class="num-input" value="${layer.x}" onchange="updateDecoLayer(${i},'x',this.value)">
+            </div>
+            <div class="form-row">
+                <span class="form-label">Y位置%</span>
+                <input type="range" min="0" max="100" value="${layer.y}" oninput="updateDecoLayer(${i},'y',this.value)">
+                <input type="number" class="num-input" value="${layer.y}" onchange="updateDecoLayer(${i},'y',this.value)">
+            </div>
+            <div class="form-row">
+                <span class="form-label">大小px</span>
+                <input type="range" min="20" max="500" value="${layer.size}" oninput="updateDecoLayer(${i},'size',this.value)">
+                <input type="number" class="num-input" value="${layer.size}" onchange="updateDecoLayer(${i},'size',this.value)">
+            </div>
+        </div>
+    `).join('');
+}
+function updateDecoLayersRef(value) {
+    const config = currentRole === 'user' ? userConfig : aiConfig;
+    config.decoLayers_Ref = value;
+    render();
+}
+function handleLayerUpload(input, index) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        updateDecoLayer(index, 'url', e.target.result);
+        renderDecoLayers();
+    };
+    reader.readAsDataURL(file);
+}
+// 当前生成的CSS存储
+let generatedCSS = '';
+let currentExportRole = null;
+
+// 生成代码
+function generateCode(roleFilter = null) {
+    generatedCSS = generateExportCSS(roleFilter);
+    currentExportRole = roleFilter;
+    
+    const output = document.getElementById('codeOutput');
+    const exportBtns = document.getElementById('exportButtons');
+    
+    output.style.display = 'block';
+    output.value = generatedCSS;
+    exportBtns.style.display = 'block';
+    
+    showToast(`已生成 ${roleFilter ? roleFilter.toUpperCase() : '完整'} CSS`);
+}
+
+// 复制到剪贴板
+function exportToClipboard() {
+    if (!generatedCSS) {
+        return alert('请先生成代码！');
+    }
+    navigator.clipboard.writeText(generatedCSS).then(() => {
+        showToast('已复制到剪贴板');
+    }).catch(err => {
+        // 降级方案
+        const textarea = document.getElementById('codeOutput');
+        textarea.select();
+        document.execCommand('copy');
+        showToast('已复制到剪贴板');
+    });
+}
+
+// 导出 TXT 文件
+function exportToTxt() {
+    if (!generatedCSS) {
+        return alert('请先生成代码！');
+    }
+    
+    const blob = new Blob([generatedCSS], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bubble-style${currentExportRole ? '-' + currentExportRole : ''}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast('TXT 文件已下载');
+}
+
+// 导出 DOCX 文件
+function exportToDocx() {
+    if (!generatedCSS) {
+        return alert('请先生成代码！');
+    }
+    
+    // 创建简单的 DOCX 格式（实际上是带格式的 HTML 转 Word）
+    const header = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' 
+              xmlns:w='urn:schemas-microsoft-com:office:word' 
+              xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Consolas, Monaco, monospace; font-size: 10pt; }
+                pre { background: #f5f5f5; padding: 10px; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; }
+                
+            </style>
+        </head>
+        <body>
+            <h2>Bubble Editor CSS Export</h2>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+            <pre>${escapeHtml(generatedCSS)}</pre>
+        </body>
+        </html>
+    `;
+    
+    const blob = new Blob([header], { type: 'application/vnd.ms-word;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bubble-style${currentExportRole ? '-' + currentExportRole : ''}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast('DOCX 文件已下载');
+}
+
+// HTML 转义
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+function applyPreset(type) {
+    switch(type) {
+        case 'card':
+            commonConfig.flexDirection = 'column';
+            commonConfig.alignItems = 'center';
+            commonConfig.cardMinHeight = 150;
+            userConfig.bubbleMode = false;
+            userConfig.avatarAbsolute = true;
+            userConfig.posterEnable = true;
+            aiConfig.bubbleMode = false;
+            aiConfig.avatarAbsolute = true;
+            aiConfig.posterEnable = true;
+            break;
+            
+        case 'bubble':
+            commonConfig.flexDirection = 'row';
+            commonConfig.alignItems = 'flex-start';
+            commonConfig.cardMinHeight = 0;
+            userConfig.bubbleMode = true;
+            userConfig.avatarAbsolute = false;
+            userConfig.posterEnable = false;
+            userConfig.contentPaddingTop = 10;
+            userConfig.contentPaddingBottom = 10;
+            aiConfig.bubbleMode = true;
+            aiConfig.avatarAbsolute = false;
+            aiConfig.posterEnable = false;
+            aiConfig.contentPaddingTop = 10;
+            aiConfig.contentPaddingBottom = 10;
+            break;
+            
+        case 'minimal':
+            commonConfig.flexDirection = 'column';
+            commonConfig.alignItems = 'center';
+            commonConfig.cardRadius = 0;
+            userConfig.bubbleMode = false;
+            userConfig.avatarAbsolute = false;
+            userConfig.posterEnable = false;
+            userConfig.borderTop = 0;
+            userConfig.borderBottom = 1;
+            aiConfig.bubbleMode = false;
+            aiConfig.avatarAbsolute = false;
+            aiConfig.posterEnable = false;
+            aiConfig.borderTop = 0;
+            aiConfig.borderBottom = 1;
+            break;
+    }
+    
+    renderTabs();
+    render();
+    showToast(`已应用 ${type} 预设`);
+}
+// ==================== 加密/混淆功能 ====================
+
+// 混淆配置
+const obfuscationConfig = {
+    defaultWords: [
+        'render', 'layout', 'component', 'style', 'design', 'theme',
+        'visual', 'element', 'container', 'wrapper', 'module', 'block',
+        'section', 'frame', 'layer', 'view', 'panel', 'grid', 'flex',
+        'animation', 'transition', 'transform', 'effect', 'filter',
+        'core', 'base', 'init', 'config', 'setup', 'main', 'app'
+    ],
+    
+    dummyProperties: [
+        'empty-cells: show',
+        'caption-side: top',
+        'border-collapse: separate',
+        'table-layout: auto',
+        'orphans: 2',
+        'widows: 2',
+        'page-break-inside: auto',
+        '-webkit-font-smoothing: antialiased',
+        'text-rendering: optimizeLegibility'
+    ],
+    
+    levelConfig: {
+        1: { comments: 3, dummy: 1, watermarks: 1, name: '轻度' },
+        2: { comments: 6, dummy: 2, watermarks: 2, name: '中度' },
+        3: { comments: 12, dummy: 4, watermarks: 3, name: '较重' },
+        4: { comments: 20, dummy: 6, watermarks: 5, name: '重度' },
+        5: { comments: 35, dummy: 10, watermarks: 8, name: '极重' }
+    }
+};
+
+// 初始化加密Tab事件
+function initEncryptEvents() {
+    // 十六进制预览
+    const hiddenMarkInput = document.getElementById('hiddenMark');
+    if (hiddenMarkInput) {
+        hiddenMarkInput.oninput = updateHexPreview;
+        updateHexPreview();
+    }
+    
+    // 等级滑块
+    const levelSlider = document.getElementById('obfuscationLevel');
+    if (levelSlider) {
+        levelSlider.oninput = updateLevelDisplay;
+        updateLevelDisplay();
+    }
+    
+    // 水印数量同步
+    const wcRange = document.getElementById('watermarkCount');
+    const wcNum = document.getElementById('watermarkCount_num');
+    if (wcRange && wcNum) {
+        wcRange.oninput = () => { wcNum.value = wcRange.value; };
+        wcNum.onchange = () => { wcRange.value = wcNum.value; };
+    }
+}
+
+// 更新十六进制预览
+function updateHexPreview() {
+    const input = document.getElementById('hiddenMark');
+    const preview = document.getElementById('hexPreview');
+    if (input && preview) {
+        preview.textContent = stringToHex(input.value ||'qaq');
+    }
+}
+
+// 更新等级显示
+function updateLevelDisplay() {
+    const level = parseInt(document.getElementById('obfuscationLevel')?.value || '2');
+    const cfg = obfuscationConfig.levelConfig[level];
+    
+    const disp = document.getElementById('obfuscationLevel_disp');
+    if (disp) disp.textContent = cfg.name;
+    
+    const desc = document.getElementById('levelDescription');
+    if (desc) {
+        desc.innerHTML = `等级${level}：插入<b>${cfg.comments}</b> 条注释 +<b>${cfg.dummy}</b> 条dummy规则 + <b>${cfg.watermarks}</b> 处水印`;
+    }
+}
+
+// ==================== 核心：生成混淆代码 ====================
+function generateEncryptedCode(roleFilter = null) {
+    // 1. 获取原始CSS
+    let css = generateExportCSS(roleFilter);
+    
+    // 2. 收集所有选项
+    const options = {
+        authorName: document.getElementById('authorName')?.value || 'qaq',
+        authorContact: document.getElementById('authorContact')?.value || '',
+        authorStatement: document.getElementById('authorStatement')?.value || '',
+        watermarkPosition: document.getElementById('watermarkPosition')?.value || 'random',
+        watermarkCount: parseInt(document.getElementById('watermarkCount')?.value || '3'),
+        
+        hiddenMark: document.getElementById('hiddenMark')?.value ||'qaq',
+        classPrefix: document.getElementById('classPrefixValue')?.value || 'qaq-',
+        varPrefix: document.getElementById('varPrefixValue')?.value || '--qaq',
+        customWords: (document.getElementById('customObfWords')?.value || '')
+            .split('\n').filter(w => w.trim()),
+        
+        enableRandomComments: document.getElementById('obf_randomComments')?.checked ?? true,
+        enableHexContent: document.getElementById('obf_hexContent')?.checked ?? true,
+        enableAuthorMark: document.getElementById('obf_authorMark')?.checked ?? true,
+        enableDummyRules: document.getElementById('obf_dummyRules')?.checked ?? false,
+        enableClassPrefix: document.getElementById('obf_classPrefix')?.checked ?? false,
+        enableUnicodeEscape: document.getElementById('obf_unicodeEscape')?.checked ?? false,
+        enableChainLock: document.getElementById('obf_chainLock')?.checked ?? false,
+        
+        level: parseInt(document.getElementById('obfuscationLevel')?.value || '2')
+    };
+    
+    // 3. 应用混淆
+    const result = applyObfuscation(css, options);
+    
+    // 4. 显示结果
+    const output = document.getElementById('encryptedOutput');
+    const exportBtns = document.getElementById('encryptedExportBtns');
+    output.style.display = 'block';
+    output.value = result.css;
+    exportBtns.style.display = 'block';
+    
+    document.getElementById('codeStats').innerHTML = 
+        `原始 <b>${css.length}</b> 字符 → 混淆后 <b>${result.css.length}</b> 字符 (+${Math.round((result.css.length/css.length-1)*100)}%)`;
+    
+    showToast(`已生成混淆代码 [${obfuscationConfig.levelConfig[options.level].name}]`);
+}
+
+// ==================== 混淆处理主函数 ====================
+function applyObfuscation(css, opt) {
+    let result = css;
+    const levelCfg = obfuscationConfig.levelConfig[opt.level];
+    
+    // 1. 链式锁定
+    if (opt.enableChainLock) {
+        result = applyChainLock(result, opt.varPrefix);
+    }
+    
+    // 2. 类名前缀
+    if (opt.enableClassPrefix && opt.classPrefix) {
+        result = applyClassPrefix(result, opt.classPrefix);
+    }
+    
+    // 3. 作者水印
+    if (opt.enableAuthorMark) {
+        const watermarks = generateWatermarks(opt, Math.min(opt.watermarkCount, levelCfg.watermarks + 2));
+        result = insertWatermarks(result, watermarks, opt.watermarkPosition);
+    }
+    
+    // 4. 十六进制标识
+    if (opt.enableHexContent) {
+        const hexMarks = generateHexMarks(opt.hiddenMark, opt.authorName);
+        result = insertRandomMarks(result, hexMarks,3+ opt.level);
+    }
+    
+    // 5. 随机干扰注释
+    if (opt.enableRandomComments) {
+        const words = opt.customWords.length > 0 ? opt.customWords : obfuscationConfig.defaultWords;
+        result = insertRandomComments(result, words, levelCfg.comments, opt.enableUnicodeEscape);
+    }
+    
+    // 6. 无效CSS规则
+    if (opt.enableDummyRules) {
+        result = insertDummyRules(result, levelCfg.dummy, opt.classPrefix ||'qaq-');
+    }
+    
+    // 7. 末尾签名
+    const timestamp = Date.now().toString(36);
+    const signature = `\n\n/* ${stringToHex(opt.authorName)}@${timestamp} */`;
+    result += signature;
+    
+    return { css: result };
+}
+
+// ==================== 链式锁定 ====================
+function applyChainLock(css, varPrefix) {
+    // 提取所有颜色
+    const colorRegex = /(#[a-fA-F0-9]{3,8}|rgba?\([^)]+\))/g;
+    const colors = new Set();
+    let match;
+    while ((match = colorRegex.exec(css)) !== null) {
+        colors.add(match[1]);
+    }
+    
+    // 创建变量映射
+    const colorVars = {};
+    let varIndex = 0;
+    colors.forEach(color => {
+        colorVars[color] = `${varPrefix}-c${varIndex++}`;
+    });
+    
+    // 生成链式变量声明
+    let chainCSS = `/* Chain Lock -  Generated by qaq Offline Bubble Editor  */\n:root {\n`;
+    chainCSS += `  ${varPrefix}-lock: 1;\n`;
+    chainCSS += `  ${varPrefix}-key: calc(var(${varPrefix}-lock) * 1);\n`;
+    
+    Object.entries(colorVars).forEach(([color, varName], i) => {
+        chainCSS += `  ${varName}: ${color};${i > 0 ? ` /* dep: ${varPrefix}-c${i-1} */` : ''}\n`;
+    });
+    
+    chainCSS += `}\n\n`;
+    
+    // 守护规则
+    chainCSS += `/* 🛡️ Guard */\n`;
+    chainCSS += `#offline-mode-overlay .offline-message {\n`;
+    chainCSS += `  --_v: var(${varPrefix}-lock, 0);\n`;
+    chainCSS += `  opacity: var(--_v) !important;\n`;
+    chainCSS += `}\n\n`;
+    
+    // 替换颜色为变量
+    let lockedCSS = css;
+    Object.entries(colorVars).forEach(([color, varName]) => {
+        const escaped = color.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        lockedCSS = lockedCSS.replace(new RegExp(escaped, 'g'), `var(${varName})`);
+    });
+    
+    return chainCSS + lockedCSS;
+}
+
+// ==================== 水印生成 ====================
+function generateWatermarks(opt, count) {
+    const marks = [];
+    const timestamp = new Date().toLocaleString('zh-CN');
+    
+    const templates = [
+        () => `/*!\n * ✦ ${opt.authorName} ✦\n * ${timestamp}\n${opt.authorStatement ?` * ${opt.authorStatement}\n` : ''} */`,
+        () => `/* ═══ ${opt.authorName} ${opt.authorContact ? '| ' + opt.authorContact : ''} ═══ */`,
+        () => `/* @author ${opt.authorName} */`,
+        () => `/* ★ ${opt.authorName} - Protected★ */`,
+        () => `/* 〖${opt.authorName}〗${timestamp} */`,
+        () => `/* ${opt.authorName} © ${new Date().getFullYear()} */`,
+        () => opt.enableUnicodeEscape ? `/* ${stringToUnicode(opt.authorName)} */` : `/* ${opt.authorName} */`,
+        () => `/* ${stringToHex(opt.authorName)} */`
+    ];
+    
+    for (let i = 0; i < count; i++) {
+        marks.push(templates[i % templates.length]());
+    }
+    
+    return marks;
+}
+
+// 插入水印
+function insertWatermarks(css, watermarks, position) {
+    if (watermarks.length === 0) return css;
+    
+    const lines = css.split('\n');
+    const total = lines.length;
+    let positions = [];
+    
+    switch (position) {
+        case 'top':
+            positions = [0];
+            break;
+        case 'middle':
+            positions = [Math.floor(total / 2)];
+            break;
+        case 'bottom':
+            positions = [total];
+            break;
+        case 'all':
+            positions = [0, Math.floor(total / 3), Math.floor(total * 2 / 3), total];
+            break;
+        case 'random':
+        default:
+            for (let i = 0; i < watermarks.length; i++) {
+                positions.push(Math.floor(Math.random() * total));
+            }
+            positions.sort((a, b) => b - a);
+            break;
+    }
+    
+    positions.forEach((pos, i) => {
+        const mark = watermarks[i % watermarks.length];
+        if (pos >= lines.length) {
+            lines.push('\n' + mark);
+        } else {
+            lines.splice(pos, 0, mark);
+        }
+    });
+    
+    return lines.join('\n');
+}
+
+// ==================== 十六进制标识 ====================
+function generateHexMarks(hiddenMark, authorName) {
+    return [
+        stringToHex(hiddenMark),
+        stringToHex(authorName.substring(0, 5)),
+        '\\70\\72\\6f\\74\\65\\63\\74', // protect
+        stringToHex(Date.now().toString(36).substring(0, 4))
+    ];
+}
+
+function insertRandomMarks(css, marks, count) {
+    const positions = findInsertPositions(css, count);
+    
+    positions.reverse().forEach((pos, i) => {
+        const mark = `/* ${marks[i % marks.length]} */`;
+        css = css.slice(0, pos) + '\n' + mark + css.slice(pos);
+    });
+    
+    return css;
+}
+
+// ==================== 干扰注释 ====================
+function insertRandomComments(css, words, count, useUnicode) {
+    const positions = findInsertPositions(css, count);
+    
+    const styles = [
+        (w) => `/* ${w} */`,
+        (w) => `/* ${w}-${randomPick(words)} */`,
+        (w) => `/* ${w}: v${Math.floor(Math.random() * 99)} */`,
+        (w) => `/* #${Math.random().toString(36).substring(2, 8)} */`,
+        (w) => `/*-- ${w} --*/`
+    ];
+    
+    positions.reverse().forEach(pos => {
+        let word = randomPick(words);
+        if (useUnicode && Math.random() > 0.7) {
+            word = stringToUnicode(word);
+        }
+        const comment = randomPick(styles)(word);
+        css = css.slice(0, pos) + '\n' + comment + css.slice(pos);
+    });
+    
+    return css;
+}
+
+// ==================== 无效规则 ====================
+function insertDummyRules(css, count, prefix) {
+    const randomStr = () => Math.random().toString(36).substring(2, 6);
+    
+    let dummyCSS = '\n/* layout */\n';
+    
+    for (let i = 0; i < count; i++) {
+        const selectors = [
+            `.${prefix}void-${randomStr()}`,
+            `#${prefix}null-${randomStr()}`,
+            `[data-${prefix}x="${randomStr()}"]`
+        ];
+        
+        const selector = randomPick(selectors);
+        const props = [];
+        const numProps = 2 + Math.floor(Math.random() * 2);
+        
+        for (let j = 0; j < numProps; j++) {
+            props.push(randomPick(obfuscationConfig.dummyProperties));
+        }
+        
+        dummyCSS += `${selector} { ${props.join('; ')}; }\n`;
+    }
+    
+    const midPos = findInsertPositions(css, 1)[0] || Math.floor(css.length / 2);
+    return css.slice(0, midPos) + dummyCSS + css.slice(midPos);
+}
+
+// ==================== 类名前缀 ====================
+function applyClassPrefix(css, prefix) {
+    const classNames = [
+        'offline-message',
+        'offline-avatar',
+        'offline-message-content',
+        'offline-message-text'
+    ];
+    
+    let result = css;
+    classNames.forEach(cls => {
+        result = result.replace(new RegExp(`\\.${cls}`, 'g'), '.' + prefix + cls);
+    });
+    
+    return result;
+}
+
+// ==================== 工具函数 ====================
+function stringToHex(str) {
+    if (!str) return '';
+    return str.split('').map(c => '\\' + c.charCodeAt(0).toString(16)).join('');
+}
+
+function stringToUnicode(str) {
+    if (!str) return '';
+    return str.split('').map(c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')).join('');
+}
+
+function findInsertPositions(css, count) {
+    const positions = [];
+    let pos = 0;
+    
+    while ((pos = css.indexOf('}', pos + 1)) !== -1) {
+        if (css[pos + 1] !=='}') {
+            positions.push(pos + 1);
+        }
+    }
+    
+    const shuffled = positions.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(count, shuffled.length)).sort((a, b) => a - b);
+}
+
+function randomPick(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ==================== 导出功能 ====================
+function copyEncrypted() {
+    const output = document.getElementById('encryptedOutput');
+    if (!output?.value) return alert('请先生成混淆代码！');
+    
+    navigator.clipboard.writeText(output.value).then(() => {
+        showToast(' 混淆代码已复制');
+    }).catch(() => {
+        output.select();
+        document.execCommand('copy');
+        showToast(' 混淆代码已复制');
+    });
+}
+
+function downloadEncrypted() {
+    const output = document.getElementById('encryptedOutput');
+    if (!output?.value) return alert('请先生成混淆代码！');
+    
+    const author = document.getElementById('authorName')?.value || 'qaq';
+    const blob = new Blob([output.value], { type: 'text/css;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${author}-style-encrypted.css`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast(' 文件已下载');
+}
+// 快速填入计数器符号
+function fillCounterSymbols(symbols) {
+    const config = currentRole === 'user' ? userConfig : aiConfig;
+    config.counterStyle = 'custom';
+    config.counterCustomSymbols = symbols;
+    
+    // 更新UI
+    const styleSelect = document.getElementById('counterStyle');
+    if (styleSelect) styleSelect.value = 'custom';
+    
+    const symbolsInput = document.getElementById('counterCustomSymbols');
+    if (symbolsInput) symbolsInput.value = symbols;
+    
+    updateConditionalFields();
+    updateCounterPreview();
+    render();
+    
+    showToast('已填入符号');
+}
+// 初始化
+renderTabs();
+render();
+updateConditionalFields(); // 【新增】初始化时更新字段显示状态
+</script>
+</body>
+</html>
