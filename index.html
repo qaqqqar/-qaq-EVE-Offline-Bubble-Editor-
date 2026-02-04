@@ -50,7 +50,16 @@
         .preview-container.bg-white { background: #ffffff; }
         .preview-container.bg-dark { background: #1a1a2e; }
         .preview-container.bg-black { background: #000000; }
-
+.undo-redo-btns {
+    position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; z-index: 200;
+}
+.undo-btn, .redo-btn {
+    width: 28px; height: 28px; border-radius: 4px; border: none;
+    background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.3); cursor: pointer;
+    font-size: 14px; font-weight: bold; color: #333;
+}
+.undo-btn:hover, .redo-btn:hover { background: #e0e0e0; }
+.undo-btn:disabled, .redo-btn:disabled { opacity: 0.3; cursor: not-allowed; background: #ccc; }
         .bg-switcher {
             position: absolute; top: 8px; right: 8px; display: flex; gap: 5px; z-index: 200;
         }
@@ -234,6 +243,10 @@
 
 <!-- 1. 预览区 -->
 <div class="preview-container bg-checker" id="previewContainer">
+<div class="undo-redo-btns">
+    <button class="undo-btn" onclick="undo()" title="撤销">↩</button>
+    <button class="redo-btn" onclick="redo()" title="恢复">↪</button>
+</div>
     <div class="bg-switcher">
         <div class="bg-btn active" data-bg="checker" onclick="switchBg('checker')"></div>
         <div class="bg-btn" data-bg="white" onclick="switchBg('white')"></div>
@@ -283,6 +296,55 @@
 <script>
 // ==================== 数据结构 ====================
 let currentRole = 'common';
+// 撤销/恢复系统
+const historyStack = [];
+const redoStack = [];
+const MAX_HISTORY = 50;
+
+function saveState() {
+    const state = {
+        common: JSON.parse(JSON.stringify(commonConfig)),
+        user: JSON.parse(JSON.stringify(userConfig)),
+        ai: JSON.parse(JSON.stringify(aiConfig))
+    };
+    historyStack.push(state);
+    if (historyStack.length > MAX_HISTORY) historyStack.shift();
+    redoStack.length = 0;
+    updateUndoRedoButtons();
+}
+
+function undo() {
+    if (historyStack.length <= 1) return;
+    redoStack.push(historyStack.pop());
+    const state = historyStack[historyStack.length - 1];
+    Object.assign(commonConfig, state.common);
+    Object.assign(userConfig, state.user);
+    Object.assign(aiConfig, state.ai);
+    renderTabs();
+    render();
+    updateUndoRedoButtons();
+    showToast('已撤销');
+}
+
+function redo() {
+    if (redoStack.length === 0) return;
+    const state = redoStack.pop();
+    historyStack.push(state);
+    Object.assign(commonConfig, state.common);
+    Object.assign(userConfig, state.user);
+    Object.assign(aiConfig, state.ai);
+    renderTabs();
+    render();
+    updateUndoRedoButtons();
+    showToast('已恢复');
+}
+
+function updateUndoRedoButtons() {
+    const undoBtn = document.querySelector('.undo-btn');
+    const redoBtn = document.querySelector('.redo-btn');
+    if (undoBtn) undoBtn.disabled = historyStack.length <= 1;
+    if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+}
 
 // 通用配置
 const commonConfig = {
@@ -383,7 +445,7 @@ const roleDefaults = {
     decoC_Opacity: 100,
 
     textContent: '消息内容...', textColor: '#333333', textSize: 15, textLineHeight: 28,
-    textAlign: 'center', textSpacing: 0.5,textWrap: 'normal',
+    textAlign: 'center', textSpacing: 0.5,textWrap: 'normal',textWritingMode: 'horizontal',
     contentPadding: 20, contentPaddingTop: 130, contentPaddingBottom: 40,
     customCss: '',
     animationProp: '',
@@ -1030,6 +1092,11 @@ const rolePanels = {
             ['nowrap', '不换行'],
             ['pre', '保留换行'],
             ['pre-wrap', '保留+自动']
+        ]},
+        { id: 'textWritingMode', label: '排版方向', type: 'select', options: [
+            ['horizontal', '横排 (默认)'],
+            ['vertical-rl', '竖排 ← (从右到左)'],
+            ['vertical-lr', '竖排 → (从左到右)']
         ]}
     ]
 },
@@ -1331,15 +1398,21 @@ function bindEvents() {
     }));
 
     allFields.forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        
-        // 初始化调色板
-        if (['cardBgCss', 'customCss'].includes(id)) {
-            generatePalette(id);
-        }
+    const el = document.getElementById(id);
+    if (!el) return;
+    
+    // 初始化调色板
+    if (['cardBgCss', 'customCss'].includes(id)) {
+        generatePalette(id);
+    }
+    
+    // 松手/失焦时保存状态（用于撤销）
+    el.onchange = () => {
+        saveState();
+    };
         
         el.oninput = (e) => {
+      
             const fieldId = id.replace('_num', '');
             let val = el.type === 'checkbox' ? el.checked : el.value;
             if (el.type === 'range' || el.type === 'number') val = parseFloat(val);
@@ -1666,6 +1739,10 @@ ${contentSelector} {
     word-break: break-word !important;
     writing-mode: horizontal-tb !important;
     font-family: ${fontName} !important;
+    writing-mode: ${config.textWritingMode === 'vertical-rl' ? 'vertical-rl' : (config.textWritingMode === 'vertical-lr' ? 'vertical-lr' : 'horizontal-tb')} !important;
+    ${config.textWritingMode && config.textWritingMode !== 'horizontal' ? `
+        text-orientation: mixed !important;
+    ` : ''}
     
     /* 自由定位 */
     ${config.textAbsolute ? `
@@ -1711,6 +1788,7 @@ ${contentSelector} * {
 }
 
 /* 预览区文字（仅预览用） */
+/* 预览区文字（仅预览用） */
 ${textSelector} {
     color: ${config.textColor} !important;
     font-size: ${config.textSize}px !important;
@@ -1722,6 +1800,12 @@ ${textSelector} {
     font-family: ${fontName} !important;
     z-index: 3 !important;
     ${config.textWidth > 0 ? `width: ${config.textWidth}px !important;` : ''}
+    
+    /* ★★★ 新增：竖排支持 ★★★ */
+    writing-mode: ${config.textWritingMode === 'vertical-rl' ? 'vertical-rl' : (config.textWritingMode === 'vertical-lr' ? 'vertical-lr' : 'horizontal-tb')} !important;
+    ${config.textWritingMode && config.textWritingMode !== 'horizontal' ? `
+        text-orientation: mixed !important;
+    ` : ''}
 }
 ${avatarSelector} {
     width: ${config.avatarSize}px !important;
@@ -3621,6 +3705,8 @@ function fillCounterSymbols(symbols) {
 // 初始化
 renderTabs();
 render();
+saveState(); // 保存初始状态
+updateUndoRedoButtons();
 updateConditionalFields(); // 【新增】初始化时更新字段显示状态
 </script>
 </body>
