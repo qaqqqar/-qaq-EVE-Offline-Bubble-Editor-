@@ -334,7 +334,7 @@ const roleDefaults = {
     posterSizeFill: true,
     posterMaskTop: 0, posterMaskBottom: 0,
     
-    avatarUrl: '', avatarSize: 40, 
+    avatarUrl: '', avatarUsePlatform: true,avatarSize: 40, 
     avatarRadius: 50, 
     avatarBorderWidth: 0, avatarBorderColor: '#ffffff', avatarBorderOpacity: 100,
     avatarShadowX: 0, avatarShadowY: 2, avatarShadowBlur: 5, avatarShadowColor: '#000000', avatarShadowOpacity: 20,
@@ -383,7 +383,7 @@ const roleDefaults = {
     decoC_Opacity: 100,
 
     textContent: '消息内容...', textColor: '#333333', textSize: 15, textLineHeight: 28,
-    textAlign: 'center', textSpacing: 0.5,
+    textAlign: 'center', textSpacing: 0.5,textWrap: 'normal',
     contentPadding: 20, contentPaddingTop: 130, contentPaddingBottom: 40,
     customCss: '',
     animationProp: '',
@@ -423,6 +423,16 @@ decoB_LineHeight: 1.5,
 
 // 装饰C 补充行距（字距已有）
 decoC_LineHeight: 1.5,
+// 文字变换
+textScale: 100,
+textOffsetX: 0,
+textOffsetY: 0,
+// 在 roleDefaults 里添加这些
+textAbsolute: false,        // 是否自由定位
+textWidth: 0,               // 0表示自动宽度
+textHeight: 0,              // 0表示自动高度
+// 找到 roleDefaults，添加这些：
+textBoxPosition: 'default',  // 文本框位置：default/left/center/right
 };
 
 const userConfig = JSON.parse(JSON.stringify(roleDefaults));
@@ -507,9 +517,9 @@ const commonPanels = {
                     <div id="exportButtons" style="display:none; margin-top:10px;">
                         <div style="font-size:11px; color:#666; margin-bottom:6px;">导出方式：</div>
                         <div style="display:flex; flex-direction:column; gap:8px;">
-                            <button class="btn-primary" style="background:#10b981;" onclick="exportToClipboard()">📋 复制到剪贴板</button>
-                            <button class="btn-primary" style="background:#f59e0b;" onclick="exportToTxt()">📄 导出 TXT 文件</button>
-                            <button class="btn-primary" style="background:#8b5cf6;" onclick="exportToDocx()">📝 导出 DOCX 文件</button>
+                            <button class="btn-primary" style="background:#10b981;" onclick="exportToClipboard()"> 复制到剪贴板</button>
+                            <button class="btn-primary" style="background:#f59e0b;" onclick="exportToTxt()"> 导出 TXT 文件</button>
+                            <button class="btn-primary" style="background:#8b5cf6;" onclick="exportToDocx()"> 导出 DOCX 文件</button>
                         </div>
                     </div>
                 `
@@ -824,7 +834,9 @@ const rolePanels = {
             {
                 title: '基本设置',
                 fields: [
-                    { id: 'avatarUrl', label: '图片', type: 'text', hasUpload: true },
+                    { id: 'avatarUsePlatform', label: '使用平台头像', type: 'toggle' },  // ★ 新增
+                { id: 'avatarUrl', label: '自定义图片', type: 'text', hasUpload: true, showIf: '!avatarUsePlatform' },  // ★ 修改：添加条件显示
+               
                     { id: 'avatarSize', label: '尺寸', type: 'range', min: 20, max: 200, hasNum: true },
                     { id: 'avatarRadius', label: '圆角', type: 'range', min: 0, max: 50, hasNum: true, placeholder: '50=圆' },
                     { id: 'avatarBorderWidth', label: '边框宽', type: 'range', min: 0, max: 10, hasNum: true },
@@ -1000,15 +1012,27 @@ const rolePanels = {
                 ]
             },
             {
-                title: '文字样式',
-                fields: [
-                    { id: 'textContent', label: '文本内容', type: 'textarea' },
-                    { id: 'textColor', label: '颜色', type: 'color' },
-                    { id: 'textSize', label: '字号', type: 'range', min: 10, max: 40, hasNum: true },
-                    { id: 'textLineHeight', label: '行高', type: 'range', min: 10, max: 60, hasNum: true },
-                    { id: 'textSpacing', label: '字距', type: 'range', min: -2, max: 20, step: 0.5, hasNum: true },  // ★ 确保这行存在
-            ],
-            },
+    title: '文字样式',
+    fields: [
+        { id: 'textContent', label: '文本内容', type: 'textarea' },
+        { id: 'textColor', label: '颜色', type: 'color' },
+        { id: 'textSize', label: '字号', type: 'range', min: 10, max: 40, hasNum: true },
+        { id: 'textLineHeight', label: '行高', type: 'range', min: 10, max: 60, hasNum: true },
+        { id: 'textSpacing', label: '字距', type: 'range', min: -2, max: 20, step: 0.5, hasNum: true },
+        { id: 'textAlign', label: '对齐', type: 'select', options: [
+            ['left', '左对齐'],
+            ['center', '居中'],
+            ['right', '右对齐'],
+            ['justify', '两端对齐']
+        ]},
+        { id: 'textWrap', label: '换行', type: 'select', options: [
+            ['normal', '自动换行'],
+            ['nowrap', '不换行'],
+            ['pre', '保留换行'],
+            ['pre-wrap', '保留+自动']
+        ]}
+    ]
+},
             {
                 title: '内边距 (Padding)',
                 fields: [
@@ -1022,7 +1046,24 @@ const rolePanels = {
                 fields: [
                     { id: 'customCss', label: 'CSS代码', type: 'textarea', placeholder: '在此处输入CSS，支持识别颜色...' }
                 ]
-            }
+            },
+            {
+    title: '文字位置与缩放',
+    fields: [
+        { id: 'textBoxPosition', label: '文本框位置', type: 'select', options: [
+            ['default', '默认（跟随内边距）'],
+            ['left', '靠左'],
+            ['center', '居中'],
+            ['right', '靠右']
+        ]},
+        { id: 'textAbsolute', label: '自由定位', type: 'toggle' },
+        { id: 'textOffsetX', label: 'X偏移', type: 'range', min: -400, max: 400, hasNum: true, showIf: 'textAbsolute' },
+        { id: 'textOffsetY', label: 'Y偏移', type: 'range', min: -400, max: 400, hasNum: true, showIf: 'textAbsolute' },
+        { id: 'textScale', label: '缩放%', type: 'range', min: 20, max: 300, hasNum: true },
+        { id: 'textWidth', label: '宽度px', type: 'range', min: 0, max: 500, hasNum: true },
+        { id: 'textHeight', label: '高度px', type: 'range', min: 0, max: 500, hasNum: true }
+    ]
+},
         ]
     },
     counter: {
@@ -1248,10 +1289,24 @@ function renderField(field) {
     }
     
     if (field.showIf) {
-        const [condId, condVal] = field.showIf.includes('=') ? field.showIf.split('=') : [field.showIf, 'true'];
-        const currentVal = String(config[condId]);
-        displayStyle = (condVal === 'true' ? config[condId] : currentVal === condVal) ? 'flex' : 'none';
+    let showIf = field.showIf;
+    let negate = false;
+    
+    // ★ 新增：支持 ! 取反
+    if (showIf.startsWith('!')) {
+        negate = true;
+        showIf = showIf.substring(1);
     }
+    
+    const [condId, condVal] = showIf.includes('=') ? showIf.split('=') : [showIf, 'true'];
+    const currentVal = String(config[condId]);
+    let shouldShowField = (condVal === 'true' ? config[condId] : currentVal === condVal);
+    
+    // 应用取反
+    if (negate) shouldShowField = !shouldShowField;
+    
+    displayStyle = shouldShowField ? 'flex' : 'none';
+}
     
     return `<div class="form-row" id="row-${field.id}" style="display:${displayStyle}" data-show-if="${field.showIf || ''}" data-hide-in-bubble="${field.hideInBubble || field.bubbleHide ? 'true' : ''}"><span class="form-label">${field.label}</span>${input}</div>`;
 }
@@ -1387,30 +1442,36 @@ function updateCounterPreview() {
 function updateConditionalFields() {
     const config = currentRole === 'common' ? commonConfig : (currentRole === 'user' ? userConfig : aiConfig);
     
-    // 判断当前是否是角色配置（通用配置没有 bubbleMode）
     const isRoleConfig = currentRole === 'user' || currentRole === 'ai';
     const bubbleMode = isRoleConfig && config.bubbleMode;
     
     document.querySelectorAll('[data-show-if], [data-hide-in-bubble]').forEach(el => {
         let shouldShow = true;
         
-        // 【新增】气泡模式隐藏逻辑
         if (bubbleMode && el.dataset.hideInBubble === 'true') {
             shouldShow = false;
         }
         
-        // 原有条件显示逻辑
         if (shouldShow && el.dataset.showIf) {
-            const cond = el.dataset.showIf;
+            let cond = el.dataset.showIf;
+            let negate = false;
+            
+            // ★ 新增：支持 ! 取反
+            if (cond.startsWith('!')) {
+                negate = true;
+                cond = cond.substring(1);
+            }
+            
             const [condId, condVal] = cond.includes('=') ? cond.split('=') : [cond, 'true'];
             const currentVal = String(config[condId]);
             shouldShow = (condVal === 'true' ? config[condId] : currentVal === condVal);
+            
+            if (negate) shouldShow = !shouldShow;
         }
         
         el.style.display = shouldShow ? 'flex' : 'none';
     });
 }
-
 function syncToOther(fieldIds) {
     const source = currentRole === 'user' ? userConfig : aiConfig;
     const target = currentRole === 'user' ? aiConfig : userConfig;
@@ -1447,7 +1508,7 @@ const getSelector = (refKey) => {
     
     let baseSel = '';
     if (target === 'msg') baseSel = msgSelector;
-    else if (target === 'content') baseSel = contentSelector;
+    else if (target === 'content') baseSel = ctorctor;
     else if (target === 'avatar') baseSel = avatarSelector;
     
     return `${baseSel}::${pseudo}`;
@@ -1593,28 +1654,75 @@ ${contentSelector} {
     ${config.bubbleMode ? 'width: auto' : 'width: 100%'} !important;
     box-sizing: border-box !important;
     z-index: 2 !important;
-    overflow: visible !important;  /* ★ 新增：允许装饰溢出 */
-    ${contentBgStyle}${config.bubbleMode ? `border-radius: ${c.cardRadius}px !important;
-    border-top: ${config.borderTop}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
-    border-bottom: ${config.borderBottom}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
-    border-left: ${config.borderLeft}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
-    border-right: ${config.borderRight}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
-    box-shadow: ${config.cardShadowX}px ${config.cardShadowY}px ${config.cardShadowBlur}px ${config.cardShadowSpread}px ${hexToRgba(config.cardShadowColor, config.cardShadowOpacity)} !important;
+    overflow: visible !important;
+    
+    /* ★ 文字样式直接放这里 ★ */
+    color: ${config.textColor} !important;
+    font-size: ${config.textSize}px !important;
+    line-height: ${config.textLineHeight}px !important;
+    text-align: ${config.textAlign} !important;
+    letter-spacing: ${config.textSpacing}px !important;
+    white-space: ${config.textWrap || 'normal'} !important;
+    word-break: break-word !important;
+    writing-mode: horizontal-tb !important;
+    font-family: ${fontName} !important;
+    
+    /* 自由定位 */
+    ${config.textAbsolute ? `
+        transform: translate(${config.textOffsetX || 0}px, ${config.textOffsetY || 0}px) scale(${(config.textScale || 100) / 100}) !important;
+        transform-origin: ${config.textBoxPosition === 'right' ? 'right center' : (config.textBoxPosition === 'left' ? 'left center' : 'center center')} !important;
+    ` : (config.textScale || 100) !== 100 ? `
+        transform: scale(${(config.textScale || 100) / 100}) !important;
+        transform-origin: center center !important;
+    ` : ''}
+    
+    /* 宽高限制 */
+    ${config.textWidth > 0 ? `width: ${config.textWidth}px !important; min-width: ${config.textWidth}px !important; max-width: ${config.textWidth}px !important;` : ''}
+    ${config.textHeight > 0 ? `min-height: ${config.textHeight}px !important;` : ''}
+    
+    /* 文本框位置 */
+    ${config.textBoxPosition && config.textBoxPosition !== 'default' ? `
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: ${config.textBoxPosition === 'left' ? 'flex-start' : (config.textBoxPosition === 'right' ? 'flex-end' : 'center')} !important;
+        justify-content: center !important;
+    ` : ''}
+    
+    ${contentBgStyle}
+    ${config.bubbleMode ? `
+        border-radius: ${c.cardRadius}px !important;
+        border-top: ${config.borderTop}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
+        border-bottom: ${config.borderBottom}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
+        border-left: ${config.borderLeft}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
+        border-right: ${config.borderRight}px solid ${hexToRgba(config.cardBorderColor, config.cardBorderOpacity)} !important;
+        box-shadow: ${config.cardShadowX}px ${config.cardShadowY}px ${config.cardShadowBlur}px ${config.cardShadowSpread}px ${hexToRgba(config.cardShadowColor, config.cardShadowOpacity)} !important;
     ` : ''}
     ${config.animationProp ? `animation: ${config.animationProp} !important;` : ''}
 }
 
+/* 确保所有子元素继承文字样式 */
+${contentSelector} * {
+    color: inherit !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+    text-align: inherit !important;
+    letter-spacing: inherit !important;
+    font-family: inherit !important;
+}
+
+/* 预览区文字（仅预览用） */
 ${textSelector} {
     color: ${config.textColor} !important;
     font-size: ${config.textSize}px !important;
     line-height: ${config.textLineHeight}px !important;
     text-align: ${config.textAlign} !important;
     letter-spacing: ${config.textSpacing}px !important;
+    white-space: ${config.textWrap || 'normal'} !important;
+    word-break: break-word !important;
     font-family: ${fontName} !important;
-    position: relative !important;
     z-index: 3 !important;
+    ${config.textWidth > 0 ? `width: ${config.textWidth}px !important;` : ''}
 }
-
 ${avatarSelector} {
     width: ${config.avatarSize}px !important;
     height: ${config.avatarSize}px !important;
@@ -1625,14 +1733,15 @@ ${avatarSelector} {
 }
 
 ${avatarSelector} img {
-    width: 100% !important; height: 100% !important;
+    width: 100% !important; 
+    height: 100% !important;
     object-fit: cover !important;
     border-radius: ${config.avatarRadius}% !important;
     border: ${config.avatarBorderWidth}px solid ${hexToRgba(config.avatarBorderColor, config.avatarBorderOpacity)} !important;
     display: block !important;
+    ${config.avatarUsePlatform ? '' : (config.avatarUrl ? `content: url('${config.avatarUrl}') !important;` : '')}
 }
 `;
-
     if (config.customCss) {
         let processedCss = config.customCss
             .replace(/%CONTENT%/g, contentSelector)
@@ -2139,7 +2248,19 @@ function render() {
 function updateAvatar(role) {
     const config = role === 'user' ? userConfig : aiConfig;
     const img = document.querySelector(`#avatar-${role} img`);
-    if (config.avatarUrl) {
+    
+    if (config.avatarUsePlatform) {
+        // 使用平台头像时，显示一个占位图标
+        img.src = 'data:image/svg+xml,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="48" fill="#e0e0e0" stroke="#ccc" stroke-width="2"/>
+                <circle cx="50" cy="38" r="18" fill="#aaa"/>
+                <ellipse cx="50" cy="85" rx="30" ry="25" fill="#aaa"/>
+                <text x="50" y="95" text-anchor="middle" font-size="8" fill="#666">平台头像</text>
+            </svg>
+        `);
+        img.style.display = 'block';
+    } else if (config.avatarUrl) {
         img.src = config.avatarUrl;
         img.style.display = 'block';
     } else {
